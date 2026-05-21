@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Exec(find)",
+      "Exec(npm run)",
+      "Exec(pm2 show)",
+      "Exec(pm2 restart)",
+      "Exec(pm2 logs)",
+      "Exec(pm2 list)",
+      "Exec(rm)",
+      "Exec(netstat)",
+      "Exec(pm2 flush)",
+      "Exec(curl)",
+      "Exec(psql)",
+      "Exec(cat)"
+    ]
+  }
+}
