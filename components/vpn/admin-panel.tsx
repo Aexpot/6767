@@ -120,7 +120,7 @@ export function AdminPanel({ onBack, onNavigate }: AdminPanelProps) {
   const [page,         setPage]         = useState(1)
   const [totalPg,      setTotalPg]      = useState(1)
   const [ticketFilter, setTicketFilter] = useState<'open' | 'closed' | 'all'>('open')
-  const [marzbanStatus, setMarzbanStatus] = useState<{ connected: boolean; message: string } | null>(null)
+  const [remnawaveStatus, setRemnawaveStatus] = useState<{ connected: boolean; message: string } | null>(null)
   const [openTicket,   setOpenTicket]   = useState<{ ticket: Ticket; messages: TicketMessage[] } | null>(null)
   const [replyText,    setReplyText]    = useState('')
   const [replying,     setReplying]     = useState(false)
@@ -146,18 +146,18 @@ export function AdminPanel({ onBack, onNavigate }: AdminPanelProps) {
         const r = await fetch(`/api/admin/settings?telegram_id=${tid}`)
         if (r.ok) setSettings(await r.json())
 
-        // Check Marzban status
+        // Check Remnawave status
         try {
           const mr = await fetch('/api/admin/system?telegram_id=${tid}')
           if (mr.ok) {
             const md = await mr.json()
-            setMarzbanStatus({
-              connected: md.marzban_connected || false,
-              message: md.marzban_message || (md.marzban_connected ? 'Подключено' : 'Не подключено')
+            setRemnawaveStatus({
+              connected: md.remnawave_connected || false,
+              message: md.remnawave_message || (md.remnawave_connected ? 'Подключено' : 'Не подключено')
             })
           }
         } catch (e) {
-          setMarzbanStatus({ connected: false, message: 'Ошибка проверки' })
+          setRemnawaveStatus({ connected: false, message: 'Ошибка проверки' })
         }
       }
     } finally { setLoading(false) }
@@ -370,7 +370,7 @@ export function AdminPanel({ onBack, onNavigate }: AdminPanelProps) {
         {tab === 'users'    && <UsersTab    users={users} page={page} totalPg={totalPg} search={search} setSearch={setSearch} userFilter={userFilter} setUserFilter={setUserFilter} onSearch={() => load('users', 1)} onPage={(p: number) => load('users', p)} onAction={userAction} onGrantSub={grantSub} onRemoveSub={removeSub} onReload={() => load('users', page)} tid={tid} plans={plans} />}
         {tab === 'payments' && <PaymentsTab payments={payments} page={page} totalPg={totalPg} onPage={(p: number) => load('payments', p)} />}
         {tab === 'support'  && <SupportTab  tickets={tickets} filter={ticketFilter} setFilter={setTicketFilter} onOpen={openTicketDetail} />}
-        {tab === 'settings' && <SettingsTab settings={settings} onToggleMaintenance={toggleMaintenance} onNavigate={onNavigate} marzbanStatus={marzbanStatus} />}
+        {tab === 'settings' && <SettingsTab settings={settings} onToggleMaintenance={toggleMaintenance} onNavigate={onNavigate} remnawaveStatus={remnawaveStatus} />}
       </div>
 
       <style>{adminGlobalStyle}</style>
@@ -922,7 +922,7 @@ function TicketRow({ ticket: t, last, onOpen }: { ticket: Ticket; last: boolean;
 /* ═══════════════════════════════════════════
    SETTINGS TAB
 ═══════════════════════════════════════════ */
-function SettingsTab({ settings, onToggleMaintenance, onNavigate, marzbanStatus }: { settings: any; onToggleMaintenance: () => void; onNavigate?: (s: string) => void; marzbanStatus: { connected: boolean; message: string } | null }) {
+function SettingsTab({ settings, onToggleMaintenance, onNavigate, remnawaveStatus }: { settings: any; onToggleMaintenance: () => void; onNavigate?: (s: string) => void; remnawaveStatus: { connected: boolean; message: string } | null }) {
   if (!settings) return <Empty text="Загрузка" />
 
   const rows = [
@@ -959,13 +959,13 @@ function SettingsTab({ settings, onToggleMaintenance, onNavigate, marzbanStatus 
         </div>
       </section>
 
-      {/* Marzban Status */}
+      {/* Remnawave Status */}
       <section style={{ display: 'flex', flexDirection: 'column', gap: SP.sm }}>
-        <p style={sectionStyle}>Marzban VPN Panel</p>
+        <p style={sectionStyle}>Remnawave VPN Panel</p>
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {marzbanStatus?.connected
+              {remnawaveStatus?.connected
                 ? <CheckCircle size={18} color={T.ok} />
                 : <XCircle size={18} color={T.warn} />}
               <div>
@@ -973,7 +973,7 @@ function SettingsTab({ settings, onToggleMaintenance, onNavigate, marzbanStatus 
                   Статус подключения
                 </p>
                 <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted, margin: '2px 0 0' }}>
-                  {marzbanStatus?.message || 'Проверка...'}
+                  {remnawaveStatus?.message || 'Проверка...'}
                 </p>
               </div>
             </div>

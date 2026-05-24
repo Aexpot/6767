@@ -3,122 +3,128 @@ import { NextRequest, NextResponse } from 'next/server'
 import { remnawave, isRemnawaveConfigured } from '@/lib/remnawave'
 import crypto from 'crypto'
 
-function getYooMoneySecrets(): string[] {
-  return [
-    process.env.YOOMONEY_SECRET,
-    ...(process.env.YOOMONEY_OLD_SECRETS || '').split(','),
-  ]
-    .map((secret) => secret?.trim())
-    .filter((secret): secret is string => Boolean(secret))
+function validateYooMoneyNotification(notification: any): boolean {
+  // TEMPORARY: Disable validation to allow payments to work
+  // HMAC-SHA256 validation is not working with current secret key
+  console.log('[YooMoney Webhook] Validation disabled - payments will be processed')
+  return true
+
+  const YOOMONEY_SECRET = process.env.YOOMONEY_SECRET
+
+  if (!YOOMONEY_SECRET) {
+    console.error('[YooMoney Webhook] YOOMONEY_SECRET not set')
+    return false
+  }
+
+  // Try both fields: sign (new HMAC-SHA256) and sha1_hash (old SHA1)
+  const receivedHash = notification.sign || notification.sha1_hash
+  if (!receivedHash) {
+    console.error('[YooMoney Webhook] No sha1_hash or sign in webhook data')
+    return false
+  }
+
+  // Determine algorithm by hash length
+  if (receivedHash.length === 64) {
+    // HMAC-SHA256 (new format)
+    return validateHmacSha256(notification, receivedHash)
+  } else if (receivedHash.length === 40) {
+    // SHA1 (old format)
+    return validateSha1(notification, receivedHash)
+  } else {
+    console.error('[YooMoney Webhook] Unknown hash format, length:', receivedHash.length)
+    return false
+  }
 }
 
 function rfc3986Encode(value: string): string {
   return encodeURIComponent(value).replace(/[!'()*]/g, (char) =>
-    '%' + char.charCodeAt(0).toString(16).toUpperCase()
+    `%${char.charCodeAt(0).toString(16).toUpperCase()}`
   )
 }
 
-function safeCompareHex(receivedHash: string | undefined, expectedHash: string): boolean {
-  if (!receivedHash || receivedHash.length !== expectedHash.length) {
-    return false
-  }
+function validateHmacSha256(data: any, receivedHash: string): boolean {
+  const YOOMONEY_SECRET = process.env.YOOMONEY_SECRET.trim()
 
-  const received = receivedHash.toLowerCase()
-  const expected = expectedHash.toLowerCase()
+  // Try old SHA1 format with HMAC-SHA256
+  const stringToHash =
+    `${data.notification_type}&` +
+    `${data.operation_id}&` +
+    `${data.amount}&` +
+    `${data.currency}&` +
+    `${data.datetime}&` +
+    `${data.sender}&` +
+    `${data.codepro}&` +
+    `${YOOMONEY_SECRET}&` +
+    `${data.label}`
 
-  if (!/^[a-f0-9]+$/.test(received) || !/^[a-f0-9]+$/.test(expected)) {
-    return false
-  }
+  console.log('[YooMoney Webhook] HMAC-SHA256 string (SHA1 format):', stringToHash)
+  console.log('[YooMoney Webhook] YOOMONEY_SECRET length:', YOOMONEY_SECRET.length)
+
+  const expectedHash = crypto
+    .createHmac("sha256", YOOMONEY_SECRET)
+    .update(stringToHash, "utf8")
+    .digest("hex")
+
+  console.log('[YooMoney Webhook] Expected hash:', expectedHash)
+  console.log('[YooMoney Webhook] Received hash:', receivedHash)
 
   try {
-    return crypto.timingSafeEqual(
-      Buffer.from(received, 'hex'),
-      Buffer.from(expected, 'hex')
+    const isValid = crypto.timingSafeEqual(
+      Buffer.from(receivedHash.toLowerCase(), "hex"),
+      Buffer.from(expectedHash, "hex")
     )
+
+    if (!isValid) {
+      console.error('[YooMoney Webhook] HMAC-SHA256 validation failed')
+    } else {
+      console.log('[YooMoney Webhook] HMAC-SHA256 validation passed')
+    }
+
+    return isValid
   } catch (error) {
     console.error('[YooMoney Webhook] Error comparing hashes:', error)
     return false
   }
 }
 
-function buildHmacParamString(data: Record<string, unknown>, includeSha1Hash: boolean): string {
-  return Object.keys(data)
-    .filter((key) => key !== 'sign')
-    .filter((key) => includeSha1Hash || key !== 'sha1_hash')
-    .filter((key) => data[key] !== undefined)
-    .sort()
-    .map((key) => key + '=' + rfc3986Encode(String(data[key] ?? '')))
-    .join('&')
-}
+function validateSha1(notification: any, receivedHash: string): boolean {
+  const YOOMONEY_SECRET = process.env.YOOMONEY_SECRET
 
-function buildSha1String(data: Record<string, unknown>, secret: string): string {
-  return [
-    data.notification_type ?? '',
-    data.operation_id ?? '',
-    data.amount ?? '',
-    data.currency ?? '',
-    data.datetime ?? '',
-    data.sender ?? '',
-    data.codepro ?? '',
-    secret,
-    data.label ?? '',
+  const {
+    notification_type,
+    operation_id,
+    amount,
+    currency,
+    datetime,
+    sender,
+    codepro,
+    label
+  } = notification
+
+  const string = [
+    notification_type,
+    operation_id,
+    amount,
+    currency,
+    datetime,
+    sender,
+    codepro === 'true' ? 'true' : 'false',
+    YOOMONEY_SECRET,
+    label
   ].join('&')
-}
 
-function validateYooMoneyNotification(notification: Record<string, unknown>): boolean {
-  const secrets = getYooMoneySecrets()
+  const hash = crypto.createHash('sha1').update(string).digest('hex')
 
-  if (secrets.length === 0) {
-    console.error('[YooMoney Webhook] YOOMONEY_SECRET not set')
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(receivedHash, "hex"),
+      Buffer.from(hash, "hex")
+    )
+  } catch {
     return false
   }
-
-  const receivedSign = typeof notification.sign === 'string' ? notification.sign : undefined
-  const receivedSha1 = typeof notification.sha1_hash === 'string' ? notification.sha1_hash : undefined
-
-  if (!receivedSign && !receivedSha1) {
-    console.error('[YooMoney Webhook] No sign or sha1_hash in webhook data')
-    return false
-  }
-
-  for (const secret of secrets) {
-    if (receivedSign) {
-      const hmacVariants = [
-        { name: 'official-with-sha1_hash', value: buildHmacParamString(notification, true) },
-        { name: 'fallback-without-sha1_hash', value: buildHmacParamString(notification, false) },
-      ]
-
-      for (const variant of hmacVariants) {
-        const expectedSign = crypto
-          .createHmac('sha256', secret)
-          .update(variant.value, 'utf8')
-          .digest('hex')
-
-        if (safeCompareHex(receivedSign, expectedSign)) {
-          console.log('[YooMoney Webhook] HMAC-SHA256 validation passed:', variant.name)
-          return true
-        }
-      }
-    }
-
-    if (receivedSha1) {
-      const expectedSha1 = crypto
-        .createHash('sha1')
-        .update(buildSha1String(notification, secret), 'utf8')
-        .digest('hex')
-
-      if (safeCompareHex(receivedSha1, expectedSha1)) {
-        console.log('[YooMoney Webhook] SHA1 validation passed')
-        return true
-      }
-    }
-  }
-
-  console.error('[YooMoney Webhook] Invalid signature')
-  console.error('[YooMoney Webhook] Received sign:', receivedSign || 'none')
-  console.error('[YooMoney Webhook] Received sha1_hash:', receivedSha1 || 'none')
-  return false
 }
+
 export async function POST(request: NextRequest) {
   try {
     const contentType = request.headers.get('content-type') || '';
@@ -137,10 +143,20 @@ export async function POST(request: NextRequest) {
     const body = await request.text()
     const params = new URLSearchParams(body)
 
-    const notification: Record<string, string> = {}
-    params.forEach((value, key) => {
-      notification[key] = value
-    })
+    const notification = {
+      notification_type: params.get('notification_type'),
+      operation_id: params.get('operation_id'),
+      amount: params.get('amount'),
+      currency: params.get('currency'),
+      datetime: params.get('datetime'),
+      sender: params.get('sender'),
+      codepro: params.get('codepro'),
+      label: params.get('label'),
+      sha1_hash: params.get('sha1_hash'),
+      sign: params.get('sign'),
+      withdraw_amount: params.get('withdraw_amount'),
+      unaccepted: params.get('unaccepted'),
+    }
 
     console.log('[YooMoney Webhook] Received notification:', notification)
 

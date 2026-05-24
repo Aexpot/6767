@@ -5,9 +5,9 @@ import { promisify } from 'util'
 const execAsync = promisify(exec)
 
 const ADMIN_IDS = process.env.ADMIN_TELEGRAM_IDS?.split(',').map(id => parseInt(id.trim())) || []
-const MARZBAN_API_URL = process.env.MARZBAN_API_URL
-const MARZBAN_USERNAME = process.env.MARZBAN_USERNAME
-const MARZBAN_PASSWORD = process.env.MARZBAN_PASSWORD
+const REMNAWAVE_API_URL = process.env.REMNAWAVE_API_URL
+const REMNAWAVE_API_TOKEN = process.env.REMNAWAVE_API_TOKEN
+const REMNAWAVE_AUTH_QUERY = process.env.REMNAWAVE_AUTH_QUERY || ''
 
 function isAdmin(telegramId: number): boolean {
   return ADMIN_IDS.includes(telegramId)
@@ -23,36 +23,41 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Check Marzban connection
-    let marzbanConnected = false
-    let marzbanMessage = 'Не настроено'
+    // Check Remnawave connection
+    let remnawaveConnected = false
+    let remnawaveMessage = 'Не настроено'
 
-    if (MARZBAN_API_URL && MARZBAN_USERNAME && MARZBAN_PASSWORD) {
+    if (REMNAWAVE_API_URL && REMNAWAVE_API_TOKEN) {
       try {
-        const response = await fetch(`${MARZBAN_API_URL}/api/user`, {
+        const url = new URL(`${REMNAWAVE_API_URL.replace(/\/$/, '')}/api/system/stats`)
+        if (REMNAWAVE_AUTH_QUERY) {
+          const [k, v] = REMNAWAVE_AUTH_QUERY.split('=')
+          if (k) url.searchParams.set(k, v ?? '')
+        }
+        const response = await fetch(url, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
-            'Authorization': `Basic ${Buffer.from(`${MARZBAN_USERNAME}:${MARZBAN_PASSWORD}`).toString('base64')}`
+            'Authorization': `Bearer ${REMNAWAVE_API_TOKEN}`,
           }
         })
 
         if (response.ok) {
-          marzbanConnected = true
-          marzbanMessage = 'Подключено'
+          remnawaveConnected = true
+          remnawaveMessage = 'Подключено'
         } else {
-          marzbanMessage = `Ошибка: ${response.status}`
+          remnawaveMessage = `Ошибка: ${response.status}`
         }
       } catch (error: any) {
-        marzbanMessage = `Ошибка соединения: ${error.message}`
+        remnawaveMessage = `Ошибка соединения: ${error.message}`
       }
     } else {
-      marzbanMessage = 'Не настроены переменные окружения'
+      remnawaveMessage = 'Не настроены переменные окружения'
     }
 
     return NextResponse.json({
-      marzban_connected: marzbanConnected,
-      marzban_message: marzbanMessage
+      remnawave_connected: remnawaveConnected,
+      remnawave_message: remnawaveMessage
     })
   } catch (error: any) {
     console.error('System API error:', error)

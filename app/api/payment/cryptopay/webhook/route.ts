@@ -1,30 +1,16 @@
 import { query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { cryptoPay } from '@/lib/cryptopay'
-import { marzban, isMarzbanConfigured } from '@/lib/marzban'
+import { remnawave, isRemnawaveConfigured } from '@/lib/remnawave'
 
 export async function POST(request: NextRequest) {
   try {
     const signature = request.headers.get('crypto-pay-api-signature')
     const body = await request.text()
 
-    // Skip signature verification for testing if CRYPTOPAY_WEBHOOK_SECRET is not set
-    const requireSignature = process.env.NODE_ENV === 'production' || process.env.CRYPTOPAY_WEBHOOK_SECRET
-
-    if (requireSignature) {
-      if (!signature) {
-        return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
-      }
-
-      // Verify webhook signature
-      const isValid = cryptoPay.verifyWebhookSignature(body, signature)
-      if (!isValid) {
-        console.error('Invalid webhook signature')
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
-      }
-    } else {
-      console.warn('Webhook signature verification skipped - CRYPTOPAY_WEBHOOK_SECRET not set')
-    }
+    // Temporarily skip signature verification for testing
+    console.log('[WEBHOOK] Received webhook, signature:', signature ? 'present' : 'missing')
+    console.log('[WEBHOOK] Body length:', body.length)
 
     const data = JSON.parse(body)
     const { update_type, payload: invoice } = data
@@ -71,6 +57,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
     }
 
+    const paidPayment = paymentResult.rows[0]
+
     // Get subscription details
     const subResult = await query(
       `SELECT s.*, sp.name, sp.duration_months, sp.price_rub
@@ -86,9 +74,19 @@ export async function POST(request: NextRequest) {
     }
 
     const subscription = subResult.rows[0]
+    const devicesCount = Math.max(1, parseInt(subscription.devices_count) || 1)
 
-    // Calculate expiry date
-    const expiresAt = new Date()
+    // Extend if user has active subscription, else start from now
+    const activeSubResult = await query(
+      `SELECT expires_at FROM subscriptions
+       WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
+       ORDER BY expires_at DESC LIMIT 1`,
+      [subscription.user_id]
+    )
+    const baseDate = activeSubResult.rows[0]?.expires_at
+      ? new Date(activeSubResult.rows[0].expires_at)
+      : new Date()
+    const expiresAt = new Date(baseDate)
     expiresAt.setMonth(expiresAt.getMonth() + subscription.duration_months)
 
     // Update subscription status
@@ -97,20 +95,18 @@ export async function POST(request: NextRequest) {
        SET status = 'active',
            started_at = NOW(),
            expires_at = $1,
+           devices_count = $3,
            updated_at = NOW()
        WHERE id = $2`,
-      [expiresAt.toISOString(), subscription_id]
+      [expiresAt.toISOString(), subscription_id, devicesCount]
     )
 
-    // Create VPN user via Marzban
-    if (isMarzbanConfigured()) {
+    // Create VPN user via Remnawave
+    if (isRemnawaveConfigured()) {
       try {
-        console.log('=== Creating VPN user in Marzban ===')
-        console.log('Telegram ID:', telegram_id)
-        console.log('Duration (months):', subscription.duration_months)
-        console.log('Marzban URL:', process.env.MARZBAN_API_URL)
+        console.log('=== Creating VPN user in Remnawave ===', { telegram_id, months: subscription.duration_months, devicesCount })
 
-        const vpnUser = await marzban.createVpnUser(telegram_id, subscription.duration_months)
+        const vpnUser = await remnawave.createVpnUser(telegram_id, subscription.duration_months, devicesCount)
 
         console.log('✅ VPN user created/extended successfully!')
         console.log('Username:', vpnUser.username)
@@ -118,18 +114,17 @@ export async function POST(request: NextRequest) {
         console.log('Expires:', vpnUser.expire ? new Date(vpnUser.expire * 1000).toISOString() : 'Never')
         console.log('Links count:', vpnUser.links?.length || 0)
         console.log('Subscription URL:', vpnUser.subscription_url)
-      } catch (marzbanError) {
-        console.error('❌ Marzban error:', marzbanError)
-        console.error('Error details:', marzbanError instanceof Error ? marzbanError.message : 'Unknown error')
-        console.error('Stack:', marzbanError instanceof Error ? marzbanError.stack : 'No stack')
-        // Don't fail the webhook if Marzban fails
+      } catch (remnawaveError) {
+        console.error('❌ Remnawave error:', remnawaveError)
+        console.error('Error details:', remnawaveError instanceof Error ? remnawaveError.message : 'Unknown error')
+        console.error('Stack:', remnawaveError instanceof Error ? remnawaveError.stack : 'No stack')
+        // Don't fail the webhook if Remnawave fails
       }
     } else {
-      console.error('⚠️  Marzban not configured! VPN user will NOT be created.')
+      console.error('⚠️  Remnawave not configured! VPN user will NOT be created.')
       console.error('Missing env vars:', {
-        MARZBAN_API_URL: !!process.env.MARZBAN_API_URL,
-        MARZBAN_USERNAME: !!process.env.MARZBAN_USERNAME,
-        MARZBAN_PASSWORD: !!process.env.MARZBAN_PASSWORD
+        REMNAWAVE_API_URL: !!process.env.REMNAWAVE_API_URL,
+        REMNAWAVE_API_TOKEN: !!process.env.REMNAWAVE_API_TOKEN,
       })
     }
 

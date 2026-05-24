@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { marzban } from '@/lib/marzban'
+import { remnawave } from '@/lib/remnawave'
 
 // Check if user is admin
 function checkAdminAccess(request: NextRequest) {
@@ -71,15 +71,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create VPN user in Marzban
+    // Create VPN user in Remnawave
     try {
-      console.log('=== Admin: Creating VPN user in Marzban ===')
+      console.log('=== Admin: Creating VPN user in Remnawave ===')
       console.log('Telegram ID:', telegramId)
       console.log('Expires at:', expiresAt.toISOString())
-      console.log('Marzban URL:', process.env.MARZBAN_API_URL)
+      console.log('Remnawave URL:', process.env.REMNAWAVE_API_URL)
 
       const expiryTimestamp = Math.floor(expiresAt.getTime() / 1000)
-      const vpnUser = await marzban.createOrUpdateUser(telegramId, expiryTimestamp, 0) // 0 = unlimited traffic
+      const vpnUser = await remnawave.createOrUpdateUser(telegramId, expiryTimestamp, 0) // 0 = unlimited traffic
 
       console.log('✅ VPN user created/updated by admin!')
       console.log('Username:', vpnUser.username)
@@ -135,9 +135,9 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'No active subscription found' }, { status: 404 })
     }
 
-    // Disable VPN user in Marzban
+    // Disable VPN user in Remnawave
     try {
-      await marzban.disableUser(telegramId)
+      await remnawave.disableUser(telegramId)
     } catch (vpnError) {
       console.error('Error disabling VPN user:', vpnError)
       // Continue anyway, subscription is cancelled

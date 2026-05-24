@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Migration script to create Marzban VPN accounts for existing trial users
+ * Migration script to create Remnawave VPN accounts for existing trial users
  */
 
 const { Pool } = require('pg');
@@ -13,16 +13,16 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
 
-const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
-const MARZBAN_USERNAME = process.env.MARZBAN_USERNAME;
+const REMNAWAVE_API_URL = process.env.REMNAWAVE_API_URL;
+const REMNAWAVE_API_TOKEN = process.env.REMNAWAVE_API_TOKEN;
 const MARZBAN_PASSWORD = process.env.MARZBAN_PASSWORD;
 
 async function getMarzbanToken() {
-  const response = await fetch(`${MARZBAN_API_URL}/api/admin/token`, {
+  const response = await fetch(`${REMNAWAVE_API_URL}/api/admin/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      username: MARZBAN_USERNAME,
+      username: REMNAWAVE_API_TOKEN,
       password: MARZBAN_PASSWORD
     })
   });
@@ -35,9 +35,9 @@ async function createMarzbanUser(token, telegramId, expiresAt) {
   const username = `tg_${telegramId}`;
   const expireTimestamp = Math.floor(new Date(expiresAt).getTime() / 1000);
 
-  console.log(`Creating Marzban user: ${username}, expires: ${expiresAt}`);
+  console.log(`Creating Remnawave user: ${username}, expires: ${expiresAt}`);
 
-  const response = await fetch(`${MARZBAN_API_URL}/api/user`, {
+  const response = await fetch(`${REMNAWAVE_API_URL}/api/user`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -83,7 +83,7 @@ async function main() {
   }
 
   const token = await getMarzbanToken();
-  console.log('Got Marzban token\n');
+  console.log('Got Remnawave token\n');
 
   let created = 0;
   let skipped = 0;
@@ -93,7 +93,7 @@ async function main() {
     try {
       const user = await createMarzbanUser(token, row.telegram_id, row.expires_at);
       console.log(`✓ Created: tg_${row.telegram_id}`);
-      console.log(`  Subscription URL: ${MARZBAN_API_URL}${user.subscription_url}\n`);
+      console.log(`  Subscription URL: ${REMNAWAVE_API_URL}${user.subscription_url}\n`);
       created++;
     } catch (error) {
       if (error.message.includes('already exists')) {

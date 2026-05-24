@@ -28,6 +28,8 @@ export function SubscriptionScreen({ onNavigate }: SubscriptionScreenProps) {
   const [promocode, setPromocode] = useState('')
   const [promocodeApplied, setPromocodeApplied] = useState(false)
   const [discount, setDiscount] = useState(0)
+  const [extraDevices, setExtraDevices] = useState(0)
+  const EXTRA_DEVICE_PRICE = 90
 
   useEffect(() => { const t = setTimeout(() => setMounted(true), 40); return () => clearTimeout(t) }, [])
   useEffect(() => { if (plans.length && !selectedPlan) setSelectedPlan(plans.find(p => p.is_popular)?.id || plans[0]?.id || '') }, [plans, selectedPlan])
@@ -67,6 +69,7 @@ export function SubscriptionScreen({ onNavigate }: SubscriptionScreenProps) {
       let requestBody: any = {
         telegram_id: telegramUser.id,
         plan_id: chosen.id,
+        extra_devices: extraDevices,
       }
 
       // Add promocode if applied
@@ -191,6 +194,26 @@ export function SubscriptionScreen({ onNavigate }: SubscriptionScreenProps) {
           {plans.map(p => <PlanCard key={p.id} plan={p} selected={selectedPlan===p.id} onSelect={()=>setSelectedPlan(p.id)} />)}
         </div>
 
+        {/* Extra devices */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'8px', ...reveal(mounted,5) }}>
+          <p style={{ fontFamily:BODY, fontSize:'12px', fontWeight:600, color:C.textMuted, textTransform:'uppercase', letterSpacing:'0.06em', margin:'0 0 2px' }}>Дополнительные устройства</p>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:`12px ${R.cardPadH}`, borderRadius:R.cardRadius, background:C.cardLight }}>
+            <div style={{ flex:1 }}>
+              <p style={{ fontFamily:BODY, fontSize:'14px', fontWeight:600, color:C.text, margin:0 }}>Доп. устройств</p>
+              <p style={{ fontFamily:BODY, fontSize:'11px', color:C.textMuted, margin:'2px 0 0' }}>+{EXTRA_DEVICE_PRICE} ₽ за каждое (1 устройство в подписке уже включено)</p>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+              <button onClick={()=>setExtraDevices(Math.max(0, extraDevices - 1))}
+                disabled={extraDevices === 0}
+                style={{ width:'32px', height:'32px', borderRadius:'10px', border:`2px solid ${C.border}`, background:C.bg, fontSize:'18px', fontWeight:700, color:C.text, cursor: extraDevices===0?'not-allowed':'pointer', opacity: extraDevices===0?0.4:1 }}>−</button>
+              <span style={{ minWidth:'24px', textAlign:'center', fontFamily:DISPLAY, fontSize:'18px', fontWeight:800, color:C.text }}>{extraDevices}</span>
+              <button onClick={()=>setExtraDevices(Math.min(5, extraDevices + 1))}
+                disabled={extraDevices === 5}
+                style={{ width:'32px', height:'32px', borderRadius:'10px', border:`2px solid ${C.accent}`, background:C.accent, fontSize:'18px', fontWeight:700, color:'#fff', cursor: extraDevices===5?'not-allowed':'pointer', opacity: extraDevices===5?0.4:1 }}>+</button>
+            </div>
+          </div>
+        </div>
+
         {/* Promocode */}
         <div style={{ display:'flex', flexDirection:'column', gap:'8px', ...reveal(mounted,5) }}>
           <p style={{ fontFamily:BODY, fontSize:'12px', fontWeight:600, color:C.textMuted, textTransform:'uppercase', letterSpacing:'0.06em', margin:'0 0 2px' }}>Промокод</p>
@@ -258,7 +281,7 @@ export function SubscriptionScreen({ onNavigate }: SubscriptionScreenProps) {
         {error && <p style={{ fontFamily:BODY, fontSize:'13px', color:C.error, textAlign:'center', margin:0 }}>{error}</p>}
 
         <div style={reveal(mounted,7)}>
-          <CTAButton plan={chosen} loading={loading} onClick={handlePay} discount={discount} />
+          <CTAButton plan={chosen} loading={loading} onClick={handlePay} discount={discount} extraDevices={extraDevices} extraDevicePrice={EXTRA_DEVICE_PRICE} />
         </div>
 
         <style>{`main::-webkit-scrollbar{display:none}`}</style>
@@ -322,9 +345,14 @@ function PayMethodCard({ method, selected, onSelect }: { method: typeof payMetho
   )
 }
 
-function CTAButton({ plan, loading, onClick, discount }: { plan: any; loading: boolean; onClick: () => void; discount: number }) {
+function CTAButton({ plan, loading, onClick, discount, extraDevices, extraDevicePrice }: { plan: any; loading: boolean; onClick: () => void; discount: number; extraDevices: number; extraDevicePrice: number }) {
   const [pressed, setPressed] = useState(false)
-  const finalPrice = plan ? Math.max(0, parseFloat(plan.price_rub) - discount) : 0
+  const basePrice = plan ? parseFloat(plan.price_rub) + extraDevices * extraDevicePrice : 0
+  const finalPrice = Math.max(0, basePrice - discount)
+  const subtitleParts: string[] = []
+  if (plan) subtitleParts.push(plan.name)
+  if (extraDevices > 0) subtitleParts.push(`+${extraDevices} устр.`)
+  if (discount > 0) subtitleParts.push(`скидка ${discount} ₽`)
   return (
     <button onClick={onClick} disabled={!plan || loading}
       onPointerDown={()=>setPressed(true)} onPointerUp={()=>setPressed(false)} onPointerLeave={()=>setPressed(false)}
@@ -334,7 +362,7 @@ function CTAButton({ plan, loading, onClick, discount }: { plan: any; loading: b
       </span>
       {plan && !loading && (
         <span style={{ display:'block', fontFamily:BODY, fontSize:'12px', color:'rgba(255,255,255,0.6)', marginTop:'2px' }}>
-          {discount > 0 ? `${plan.name} • скидка ${discount} ₽` : plan.name}
+          {subtitleParts.join(' • ')}
         </span>
       )}
     </button>

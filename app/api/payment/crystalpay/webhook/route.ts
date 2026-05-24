@@ -1,7 +1,7 @@
 import { query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { crystalPay } from '@/lib/crystalpay'
-import { marzban, isMarzbanConfigured } from '@/lib/marzban'
+import { remnawave, isRemnawaveConfigured } from '@/lib/remnawave'
 
 export async function POST(request: NextRequest) {
   try {
@@ -187,15 +187,15 @@ export async function POST(request: NextRequest) {
 
     console.log('Subscription activated:', updateResult.rows[0])
 
-    // Create VPN user via Marzban
-    if (isMarzbanConfigured()) {
+    // Create VPN user via Remnawave
+    if (isRemnawaveConfigured()) {
       try {
-        console.log('=== Creating VPN user in Marzban ===')
+        console.log('=== Creating VPN user in Remnawave ===')
         console.log('Telegram ID:', telegram_id)
         console.log('Duration (months):', subscription.duration_months)
-        console.log('Marzban URL:', process.env.MARZBAN_API_URL)
+        console.log('Remnawave URL:', process.env.REMNAWAVE_API_URL)
 
-        const vpnUser = await marzban.createVpnUser(telegram_id, subscription.duration_months)
+        const vpnUser = await remnawave.createVpnUser(telegram_id, subscription.duration_months)
 
         console.log('✅ VPN user created/extended successfully!')
         console.log('Username:', vpnUser.username)
@@ -203,18 +203,17 @@ export async function POST(request: NextRequest) {
         console.log('Expires:', vpnUser.expire ? new Date(vpnUser.expire * 1000).toISOString() : 'Never')
         console.log('Links count:', vpnUser.links?.length || 0)
         console.log('Subscription URL:', vpnUser.subscription_url)
-      } catch (marzbanError) {
-        console.error('❌ Marzban error:', marzbanError)
-        console.error('Error details:', marzbanError instanceof Error ? marzbanError.message : 'Unknown error')
-        console.error('Stack:', marzbanError instanceof Error ? marzbanError.stack : 'No stack')
-        // Don't fail the webhook if Marzban fails
+      } catch (remnawaveError) {
+        console.error('❌ Remnawave error:', remnawaveError)
+        console.error('Error details:', remnawaveError instanceof Error ? remnawaveError.message : 'Unknown error')
+        console.error('Stack:', remnawaveError instanceof Error ? remnawaveError.stack : 'No stack')
+        // Don't fail the webhook if Remnawave fails
       }
     } else {
-      console.error('⚠️  Marzban not configured! VPN user will NOT be created.')
+      console.error('⚠️  Remnawave not configured! VPN user will NOT be created.')
       console.error('Missing env vars:', {
-        MARZBAN_API_URL: !!process.env.MARZBAN_API_URL,
-        MARZBAN_USERNAME: !!process.env.MARZBAN_USERNAME,
-        MARZBAN_PASSWORD: !!process.env.MARZBAN_PASSWORD
+        REMNAWAVE_API_URL: !!process.env.REMNAWAVE_API_URL,
+        REMNAWAVE_API_TOKEN: !!process.env.REMNAWAVE_API_TOKEN,
       })
     }
 

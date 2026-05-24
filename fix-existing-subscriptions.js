@@ -1,4 +1,4 @@
-// Fix existing subscriptions by creating Marzban users
+// Fix existing subscriptions by creating Remnawave users
 require('dotenv').config({ path: '.env' })
 const { Pool } = require('pg')
 
@@ -6,24 +6,24 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 })
 
-const MARZBAN_API_URL = process.env.MARZBAN_API_URL?.replace(/\/$/, '')
-const MARZBAN_USERNAME = process.env.MARZBAN_USERNAME
+const REMNAWAVE_API_URL = process.env.REMNAWAVE_API_URL?.replace(/\/$/, '')
+const REMNAWAVE_API_TOKEN = process.env.REMNAWAVE_API_TOKEN
 const MARZBAN_PASSWORD = process.env.MARZBAN_PASSWORD
 
 async function getMarzbanToken() {
-  const response = await fetch(`${MARZBAN_API_URL}/api/admin/token`, {
+  const response = await fetch(`${REMNAWAVE_API_URL}/api/admin/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({
-      username: MARZBAN_USERNAME,
+      username: REMNAWAVE_API_TOKEN,
       password: MARZBAN_PASSWORD,
     }),
   })
 
   if (!response.ok) {
-    throw new Error('Failed to authenticate with Marzban')
+    throw new Error('Failed to authenticate with Remnawave')
   }
 
   const data = await response.json()
@@ -37,7 +37,7 @@ async function createMarzbanUser(token, telegramId, expiresAt) {
   console.log(`  Creating user: ${username}`)
   console.log(`  Expires: ${expiresAt} (timestamp: ${expireTimestamp})`)
 
-  const response = await fetch(`${MARZBAN_API_URL}/api/user`, {
+  const response = await fetch(`${REMNAWAVE_API_URL}/api/user`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -89,8 +89,8 @@ async function fixExistingSubscriptions() {
       return
     }
 
-    // Get Marzban token
-    console.log('Step 2: Authenticating with Marzban...')
+    // Get Remnawave token
+    console.log('Step 2: Authenticating with Remnawave...')
     const token = await getMarzbanToken()
     console.log('✅ Authenticated\n')
 
@@ -111,7 +111,7 @@ async function fixExistingSubscriptions() {
         console.log(`     Username: ${user.username}`)
         console.log(`     Status: ${user.status}`)
         console.log(`     Links: ${user.links?.length || 0}`)
-        console.log(`     Subscription URL: ${MARZBAN_API_URL}${user.subscription_url}`)
+        console.log(`     Subscription URL: ${REMNAWAVE_API_URL}${user.subscription_url}`)
         successCount++
       } catch (error) {
         console.error(`  ❌ Failed to create VPN user:`, error.message)

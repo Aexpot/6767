@@ -417,7 +417,7 @@ export async function POST(request: NextRequest) {
                 const status = p.status === 'completed' ? '✅' :
                               p.status === 'processing' ? '⏳' :
                               p.status === 'failed' ? '❌' : '❓'
-                message += `${i + 1}. ${status} <b>${p.amount_rub} ₽</b>\n`
+                message += `${i + 1}. ${status} <b>${Number(p.amount_rub) || 0} ₽</b>\n`
                 message += `   @${p.users?.username || 'N/A'} | ${p.subscriptions?.subscription_plans?.name}\n\n`
               })
             }
@@ -452,7 +452,7 @@ export async function POST(request: NextRequest) {
             await sendMessage(chatId,
               `<b>⚙️ Настройки системы</b>\n\n` +
               `🔧 Режим тех. работ: ${settings.maintenance_mode ? '🔴 Включен' : '🟢 Выключен'}\n` +
-              `🌐 Marzban API: ${settings.marzban_configured ? '✅ Настроен' : '❌ Не настроен'}\n\n` +
+              `🌐 Remnawave API: ${settings.remnawave_configured ? '✅ Настроен' : '❌ Не настроен'}\n\n` +
               `Используйте кнопки ниже для управления:`,
               {
                 reply_markup: {
@@ -487,7 +487,7 @@ export async function POST(request: NextRequest) {
               await editMessageText(chatId, update.callback_query.message!.message_id,
                 `<b>⚙️ Настройки системы</b>\n\n` +
                 `🔧 Режим тех. работ: 🔴 Включен\n` +
-                `🌐 Marzban API: ✅ Настроен\n\n` +
+                `🌐 Remnawave API: ✅ Настроен\n\n` +
                 `✅ Режим технических работ включен!\n` +
                 `Пользователи увидят уведомление.`,
                 {
@@ -526,7 +526,7 @@ export async function POST(request: NextRequest) {
               await editMessageText(chatId, update.callback_query.message!.message_id,
                 `<b>⚙️ Настройки системы</b>\n\n` +
                 `🔧 Режим тех. работ: 🟢 Выключен\n` +
-                `🌐 Marzban API: ✅ Настроен\n\n` +
+                `🌐 Remnawave API: ✅ Настроен\n\n` +
                 `✅ Режим технических работ выключен!\n` +
                 `Сервис работает в обычном режиме.`,
                 {

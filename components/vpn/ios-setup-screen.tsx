@@ -9,8 +9,8 @@ interface IosSetupScreenProps { onNavigate: (screen: Screen) => void }
 
 const steps = [
   {
-    title: "Скачайте HApp",
-    body: "Выберите версию приложения HApp для вашего региона:",
+    title: "Скачайте Happ",
+    body: "Выберите версию приложения Happ для вашего региона:",
     action: null,
     showButtons: true,
   },
@@ -20,8 +20,8 @@ const steps = [
     action: null,
   },
   {
-    title: "Добавьте подписку в HApp",
-    body: "Откройте HApp. Нажмите «+» → «Вставить из буфера» или вставьте скопированную ссылку вручную.",
+    title: "Добавьте подписку в Happ",
+    body: "Откройте Happ. Нажмите «+» → «Вставить из буфера» или вставьте скопированную ссылку вручную.",
     action: null,
   },
   {
@@ -82,20 +82,20 @@ function StepCard({ step, index, open, onToggle, idx, mounted }: { step: typeof 
 
           {step.showButtons && (
             <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginTop:'10px' }}>
-              <a href={process.env.NEXT_PUBLIC_IOS_HAPP_RU_URL || "https://apps.apple.com/app/happ-proxy-utility/id6504287215"} target="_blank" rel="noopener noreferrer"
+              <a href="https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973" target="_blank" rel="noopener noreferrer"
                 style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:'10px', background:C.accentSoft, textDecoration:'none', border:`1.5px solid ${C.accent}` }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
                   <span style={{ fontSize:'18px' }}>🇷🇺</span>
-                  <span style={{ fontFamily:BODY, fontSize:'13px', fontWeight:700, color:C.accent }}>HApp (RU)</span>
+                  <span style={{ fontFamily:BODY, fontSize:'13px', fontWeight:700, color:C.accent }}>Happ (RU)</span>
                 </div>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H5M10 2v5" stroke={C.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </a>
 
-              <a href={process.env.NEXT_PUBLIC_IOS_HAPP_GLOBAL_URL || "https://apps.apple.com/app/happ-proxy-utility/id6504287215"} target="_blank" rel="noopener noreferrer"
+              <a href="https://apps.apple.com/us/app/happ-proxy-utility/id6504287215" target="_blank" rel="noopener noreferrer"
                 style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:'10px', background:C.accentSoft, textDecoration:'none', border:`1.5px solid ${C.accent}` }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
                   <span style={{ fontSize:'18px' }}>🌍</span>
-                  <span style={{ fontFamily:BODY, fontSize:'13px', fontWeight:700, color:C.accent }}>HApp (Global)</span>
+                  <span style={{ fontFamily:BODY, fontSize:'13px', fontWeight:700, color:C.accent }}>Happ (Global)</span>
                 </div>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H5M10 2v5" stroke={C.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </a>

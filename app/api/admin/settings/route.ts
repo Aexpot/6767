@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { marzban } from '@/lib/marzban'
+import { remnawave } from '@/lib/remnawave'
 
 // Check if user is admin
 async function isAdmin(telegramId: number): Promise<boolean> {
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     if (telegramId && Number(telegramId) > 0 && (await isAdmin(Number(telegramId)))) {
       return NextResponse.json({
         ...publicResponse,
-        marzban_configured: !!(process.env.MARZBAN_API_URL && process.env.MARZBAN_USERNAME && process.env.MARZBAN_PASSWORD)
+        remnawave_configured: !!(process.env.REMNAWAVE_API_URL && process.env.REMNAWAVE_API_TOKEN)
       })
     }
 
@@ -72,7 +72,7 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// POST - Check Marzban server status
+// POST - Check Remnawave server status
 export async function POST(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
@@ -85,14 +85,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { action } = body
 
-    if (action === 'check_marzban') {
+    if (action === 'check_remnawave') {
       try {
-        console.log('Checking Marzban status...')
-        console.log('MARZBAN_API_URL:', process.env.MARZBAN_API_URL)
-        console.log('MARZBAN_USERNAME:', process.env.MARZBAN_USERNAME)
-        console.log('MARZBAN_PASSWORD:', process.env.MARZBAN_PASSWORD ? 'SET' : 'NOT SET')
+        console.log('Checking Remnawave status...')
+        console.log('REMNAWAVE_API_URL:', process.env.REMNAWAVE_API_URL)
+        console.log('REMNAWAVE_API_TOKEN:', process.env.REMNAWAVE_API_TOKEN)
 
-        const stats = await marzban.getSystemStats()
+        const stats = await remnawave.getSystemStats()
         return NextResponse.json({
           success: true,
           status: 'online',
@@ -107,7 +106,7 @@ export async function POST(request: NextRequest) {
           }
         })
       } catch (error: any) {
-        console.error('Marzban check error:', error.message)
+        console.error('Remnawave check error:', error.message)
         return NextResponse.json({
           success: false,
           status: 'offline',

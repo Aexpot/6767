@@ -1,6 +1,6 @@
 import { query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { marzban, isMarzbanConfigured } from '@/lib/marzban'
+import { remnawave, isRemnawaveConfigured } from '@/lib/remnawave'
 
 
 export async function POST(request: NextRequest) {
@@ -63,8 +63,8 @@ export async function POST(request: NextRequest) {
           [payment.user_id, payment_id, payment.amount_rub, `Оплата подписки: ${payment.plan_name}`]
         )
 
-        // Create VPN user via Marzban
-        if (isMarzbanConfigured()) {
+        // Create VPN user via Remnawave
+        if (isRemnawaveConfigured()) {
           try {
             const userResult = await query(
               'SELECT telegram_id FROM users WHERE id = $1',
@@ -74,12 +74,12 @@ export async function POST(request: NextRequest) {
             if (userResult.rows.length > 0) {
               const telegram_id = userResult.rows[0].telegram_id
 
-              console.log('=== Creating VPN user in Marzban ===')
+              console.log('=== Creating VPN user in Remnawave ===')
               console.log('Telegram ID:', telegram_id)
               console.log('Duration (months):', payment.duration_months)
-              console.log('Marzban URL:', process.env.MARZBAN_API_URL)
+              console.log('Remnawave URL:', process.env.REMNAWAVE_API_URL)
 
-              const vpnUser = await marzban.createVpnUser(telegram_id, payment.duration_months)
+              const vpnUser = await remnawave.createVpnUser(telegram_id, payment.duration_months)
 
               console.log('✅ VPN user created/extended successfully!')
               console.log('Username:', vpnUser.username)
@@ -93,11 +93,10 @@ export async function POST(request: NextRequest) {
             // Don't fail the webhook if VPN creation fails
           }
         } else {
-          console.error('⚠️  Marzban not configured! VPN user will NOT be created.')
+          console.error('⚠️  Remnawave not configured! VPN user will NOT be created.')
           console.error('Missing env vars:', {
-            MARZBAN_API_URL: !!process.env.MARZBAN_API_URL,
-            MARZBAN_USERNAME: !!process.env.MARZBAN_USERNAME,
-            MARZBAN_PASSWORD: !!process.env.MARZBAN_PASSWORD
+            REMNAWAVE_API_URL: !!process.env.REMNAWAVE_API_URL,
+            REMNAWAVE_API_TOKEN: !!process.env.REMNAWAVE_API_TOKEN,
           })
         }
 

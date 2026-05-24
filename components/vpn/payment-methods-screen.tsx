@@ -25,39 +25,39 @@ export function PaymentMethodsScreen({ onNavigate }: PaymentMethodsScreenProps) 
         </div>
       </header>
 
-      <main style={{ overflowY:'auto', scrollbarWidth:'none' as any, padding:`8px ${R.padH} 16px`, display:'flex', flexDirection:'column', gap:'10px', overscrollBehavior:'contain' }}>
+      <main style={{ overflowY:'auto', scrollbarWidth:'none' as any, padding:`6px ${R.padH} 12px`, display:'flex', flexDirection:'column', gap:'8px', overscrollBehavior:'contain' }}>
         <div style={reveal(mounted, 1)}>
-          <h1 style={{ fontFamily:DISPLAY, fontSize:'clamp(18px,6vw,24px)', fontWeight:800, color:C.text, letterSpacing:'-0.03em', margin:'8px 0 4px' }}>
+          <h1 style={{ fontFamily:DISPLAY, fontSize:'clamp(16px,5vw,22px)', fontWeight:800, color:C.text, letterSpacing:'-0.03em', margin:'6px 0 3px' }}>
             Способы оплаты
           </h1>
-          <p style={{ fontFamily:BODY, fontSize:'13px', color:C.textMuted, margin:'0 0 12px' }}>Доступные методы для продления</p>
+          <p style={{ fontFamily:BODY, fontSize:'12px', color:C.textMuted, margin:'0 0 10px' }}>Доступные методы для продления</p>
         </div>
 
         {methods.map((m, i) => (
-          <div key={m.id} style={{ display:'flex', alignItems:'center', gap:R.cardPadH, padding:`12px ${R.cardPadH}`, borderRadius:R.cardRadius, background:C.cardLight, ...reveal(mounted, i+2) }}>
+          <div key={m.id} style={{ display:'flex', alignItems:'center', gap:R.cardPadH, padding:`10px ${R.cardPadH}`, borderRadius:R.cardRadius, background:C.cardLight, ...reveal(mounted, i+2) }}>
             <div style={{ width:R.iconSz, height:R.iconSz, borderRadius:R.iconR, background:m.active?C.accentSoft:'#F0F0F2', display:'grid', placeItems:'center', flexShrink:0, opacity:m.active?1:0.6 }}>
               {m.icon}
             </div>
             <div style={{ flex:1 }}>
-              <p style={{ fontFamily:BODY, fontSize:'14px', fontWeight:600, color:m.active?C.text:C.textMuted, margin:0 }}>{m.label}</p>
-              <p style={{ fontFamily:BODY, fontSize:'12px', color:C.textMuted, margin:'2px 0 0' }}>{m.sub}</p>
+              <p style={{ fontFamily:BODY, fontSize:'13px', fontWeight:600, color:m.active?C.text:C.textMuted, margin:0 }}>{m.label}</p>
+              <p style={{ fontFamily:BODY, fontSize:'11px', color:C.textMuted, margin:'1px 0 0' }}>{m.sub}</p>
             </div>
             {m.active
-              ? <span style={{ padding:'4px 10px', borderRadius:'8px', background:C.successSoft, fontFamily:BODY, fontSize:'11px', fontWeight:700, color:C.success, flexShrink:0 }}>Доступно</span>
-              : <span style={{ padding:'4px 10px', borderRadius:'8px', background:C.cardLight, border:`1px solid ${C.border}`, fontFamily:BODY, fontSize:'11px', fontWeight:700, color:C.textMuted, flexShrink:0 }}>Скоро</span>
+              ? <span style={{ padding:'3px 8px', borderRadius:'6px', background:C.successSoft, fontFamily:BODY, fontSize:'10px', fontWeight:700, color:C.success, flexShrink:0 }}>Доступно</span>
+              : <span style={{ padding:'3px 8px', borderRadius:'6px', background:C.cardLight, border:`1px solid ${C.border}`, fontFamily:BODY, fontSize:'10px', fontWeight:700, color:C.textMuted, flexShrink:0 }}>Скоро</span>
             }
           </div>
         ))}
 
         {/* Info */}
-        <div style={{ padding:`12px ${R.cardPadH}`, borderRadius:R.cardRadius, background:C.accentSoft, display:'flex', flexDirection:'column', gap:'6px', ...reveal(mounted, methods.length+2) }}>
-          <p style={{ fontFamily:BODY, fontSize:'12px', fontWeight:700, color:C.accent, margin:0, textTransform:'uppercase', letterSpacing:'0.06em' }}>Безопасность платежей</p>
-          <p style={{ fontFamily:BODY, fontSize:'13px', color:C.text, margin:0, lineHeight:1.5 }}>Все платежи обрабатываются через официальные API Telegram и проверенные крипто-шлюзы. Данные карт не хранятся.</p>
+        <div style={{ padding:`10px ${R.cardPadH}`, borderRadius:R.cardRadius, background:C.accentSoft, display:'flex', flexDirection:'column', gap:'5px', ...reveal(mounted, methods.length+2) }}>
+          <p style={{ fontFamily:BODY, fontSize:'11px', fontWeight:700, color:C.accent, margin:0, textTransform:'uppercase', letterSpacing:'0.06em' }}>Безопасность платежей</p>
+          <p style={{ fontFamily:BODY, fontSize:'12px', color:C.text, margin:0, lineHeight:1.4 }}>Все платежи обрабатываются через официальные API Telegram и проверенные крипто-шлюзы. Данные карт не хранятся.</p>
         </div>
 
         <button onClick={() => onNavigate('subscription')}
-          style={{ display:'flex', alignItems:'center', justifyContent:'center', width:'100%', padding:'14px', borderRadius:R.cardRadius, background:C.cardDark, border:'none', cursor:'pointer', WebkitTapHighlightColor:'transparent', ...reveal(mounted, methods.length+3) }}>
-          <span style={{ fontFamily:DISPLAY, fontSize:'13px', fontWeight:800, color:'#fff', letterSpacing:'-0.02em' }}>Перейти к оплате</span>
+          style={{ display:'flex', alignItems:'center', justifyContent:'center', width:'100%', padding:'12px', borderRadius:R.cardRadius, background:C.cardDark, border:'none', cursor:'pointer', WebkitTapHighlightColor:'transparent', ...reveal(mounted, methods.length+3) }}>
+          <span style={{ fontFamily:DISPLAY, fontSize:'12px', fontWeight:800, color:'#fff', letterSpacing:'-0.02em' }}>Перейти к оплате</span>
         </button>
 
         <style>{`main::-webkit-scrollbar{display:none}`}</style>

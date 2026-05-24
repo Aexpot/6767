@@ -6,9 +6,12 @@ import { cryptoPay } from '@/lib/cryptopay'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { telegram_id, plan_id, devices_count = 1, asset = 'USDT' } = body
+    const { telegram_id, plan_id, extra_devices = 0, asset = 'USDT' } = body
+    const extraDevices = Math.max(0, Math.min(5, parseInt(extra_devices) || 0))
+    const devices_count = 1 + extraDevices
+    const EXTRA_DEVICE_PRICE_RUB = 90
 
-    console.log('CryptoPay create request:', { telegram_id, plan_id, devices_count, asset })
+    console.log('CryptoPay create request:', { telegram_id, plan_id, extraDevices, asset })
 
     if (!telegram_id || !plan_id) {
       return NextResponse.json({ error: 'telegram_id and plan_id are required' }, { status: 400 })
@@ -69,7 +72,7 @@ export async function POST(request: NextRequest) {
     console.log('Using plan:', plan)
 
     // Calculate amount in crypto (convert RUB to USD approximately)
-    const amountRub = plan.price_rub
+    const amountRub = Number(plan.price_rub) + extraDevices * EXTRA_DEVICE_PRICE_RUB
     const amountUsd = (amountRub / 95).toFixed(2) // Approximate RUB to USD conversion
 
     console.log('Creating CryptoPay invoice:', { asset, amount: amountUsd, description: `ChampionVPN ${plan.name}` })
@@ -112,6 +115,7 @@ export async function POST(request: NextRequest) {
           crypto_asset: asset,
           crypto_amount: amountUsd,
           devices_count,
+          extra_devices: extraDevices,
           duration_months: plan.duration_months
         })
       ]

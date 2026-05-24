@@ -1,7 +1,7 @@
 import { query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { crystalPay } from '@/lib/crystalpay'
-import { marzban, isMarzbanConfigured } from '@/lib/marzban'
+import { remnawave, isRemnawaveConfigured } from '@/lib/remnawave'
 
 export async function POST(request: NextRequest) {
   try {
@@ -82,14 +82,14 @@ export async function POST(request: NextRequest) {
       const telegram_id = userResult.rows[0].telegram_id
 
       // Create VPN user
-      if (isMarzbanConfigured()) {
+      if (isRemnawaveConfigured()) {
         try {
-          console.log('=== Creating VPN user in Marzban ===')
+          console.log('=== Creating VPN user in Remnawave ===')
           console.log('Telegram ID:', telegram_id)
           console.log('Duration (months):', payment.duration_months)
-          console.log('Marzban URL:', process.env.MARZBAN_API_URL)
+          console.log('Remnawave URL:', process.env.REMNAWAVE_API_URL)
 
-          const vpnUser = await marzban.createVpnUser(telegram_id, payment.duration_months)
+          const vpnUser = await remnawave.createVpnUser(telegram_id, payment.duration_months)
 
           console.log('✅ VPN user created/extended successfully!')
           console.log('Username:', vpnUser.username)
@@ -97,15 +97,14 @@ export async function POST(request: NextRequest) {
           console.log('Expires:', vpnUser.expire ? new Date(vpnUser.expire * 1000).toISOString() : 'Never')
           console.log('Links count:', vpnUser.links?.length || 0)
         } catch (error) {
-          console.error('❌ Marzban error:', error)
+          console.error('❌ Remnawave error:', error)
           console.error('Error details:', error instanceof Error ? error.message : 'Unknown error')
         }
       } else {
-        console.error('⚠️  Marzban not configured! VPN user will NOT be created.')
+        console.error('⚠️  Remnawave not configured! VPN user will NOT be created.')
         console.error('Missing env vars:', {
-          MARZBAN_API_URL: !!process.env.MARZBAN_API_URL,
-          MARZBAN_USERNAME: !!process.env.MARZBAN_USERNAME,
-          MARZBAN_PASSWORD: !!process.env.MARZBAN_PASSWORD
+          REMNAWAVE_API_URL: !!process.env.REMNAWAVE_API_URL,
+          REMNAWAVE_API_TOKEN: !!process.env.REMNAWAVE_API_TOKEN,
         })
       }
     }

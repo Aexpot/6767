@@ -1,0 +1,41 @@
+const REMNAWAVE_ENV = {
+  REMNAWAVE_API_URL: 'https://x.championvpn.fun',
+  REMNAWAVE_AUTH_QUERY: 'tusdYCcc=LJaWKMpB',
+  REMNAWAVE_API_TOKEN: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1dWlkIjoiMzRhZDExZTUtZjQ1ZC00ZTVlLWFiZDEtZjM0MGY3YzliMGExIiwidXNlcm5hbWUiOm51bGwsInJvbGUiOiJBUEkiLCJpYXQiOjE3Nzk0Njg0ODMsImV4cCI6MTA0MTkzODIwODN9.1XKIAIAUNAp2BmlYVQClbrP32cWVQqF0qteLTqlXuYw',
+  REMNAWAVE_SQUAD_UUID: '798c460f-ef2c-4c3f-80d3-a1b174468be0',
+  REMNAWAVE_SUB_URL: 'https://sub.championvpn.fun',
+}
+
+const sharedEnv = {
+  NODE_ENV: 'production',
+  DATABASE_URL: 'postgresql://championvpn_user:championvpn_secure_pass@localhost:5432/championvpn',
+  ...REMNAWAVE_ENV,
+  YOOMONEY_WALLET: '4100119537295624',
+  YOOMONEY_WALLET_ID: '4100119537295624',
+  YOOMONEY_SECRET: 'cgN7kQdBF7vY1GTWoepkI/ZT',
+  YOOMONEY_OLD_SECRETS: 'gRhxu9gvCemdCCLIeMFKmGJI',
+  TELEGRAM_BOT_TOKEN: '8860437288:AAHQdYjjHchhB_clPE277wesmxep_6TaxoA',
+  NEXT_PUBLIC_BOT_USERNAME: 'ChampionVPN_bot',
+  NEXT_PUBLIC_SUPPORT_TELEGRAM_USERNAME: 'ChampionVPN_8',
+  NEXT_PUBLIC_IOS_HAPP_RU_URL: 'https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973',
+  NEXT_PUBLIC_IOS_HAPP_GLOBAL_URL: 'https://apps.apple.com/us/app/happ-proxy-utility/id6504287215',
+}
+
+module.exports = {
+  apps: [
+    {
+      name: 'championvpn',
+      script: 'npm',
+      args: 'start -- --port 3000',
+      cwd: '/root/championvpn',
+      env: { ...sharedEnv, PORT: '3000' },
+    },
+    {
+      name: 'championvpn-3001',
+      script: 'npm',
+      args: 'start -- --port 3001',
+      cwd: '/root/championvpn',
+      env: { ...sharedEnv, PORT: '3001' },
+    },
+  ],
+}

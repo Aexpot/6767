@@ -128,8 +128,8 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
         ) : (
           <>
             {/* Аватар + имя */}
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'8px', paddingBlock:'12px', ...reveal(mounted,1) }}>
-              <div style={{ position:'relative', width:'clamp(60px,17vw,72px)', height:'clamp(60px,17vw,72px)' }}>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'6px', paddingBlock:'8px', ...reveal(mounted,1) }}>
+              <div style={{ position:'relative', width:'clamp(50px,14vw,64px)', height:'clamp(50px,14vw,64px)' }}>
                 <div style={{ width:'100%', height:'100%', borderRadius:'50%', background:C.accentSoft, display:'grid', placeItems:'center', overflow:'hidden' }}>
                   {d?.photo_url
                     ? <img src={d.photo_url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
@@ -137,28 +137,28 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
                   }
                 </div>
                 {isAdmin && (
-                  <span style={{ position:'absolute', bottom:0, right:0, width:'18px', height:'18px', borderRadius:'50%', background:C.cardDark, border:`2px solid ${C.bg}`, display:'grid', placeItems:'center' }}>
-                    <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M6 1l1.5 3.15L11 4.65 8.5 7.05l.6 3.45L6 8.9 2.9 10.5l.6-3.45L1 4.65l3.5-.5z" fill="#fff"/></svg>
+                  <span style={{ position:'absolute', bottom:0, right:0, width:'16px', height:'16px', borderRadius:'50%', background:C.cardDark, border:`2px solid ${C.bg}`, display:'grid', placeItems:'center' }}>
+                    <svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M6 1l1.5 3.15L11 4.65 8.5 7.05l.6 3.45L6 8.9 2.9 10.5l.6-3.45L1 4.65l3.5-.5z" fill="#fff"/></svg>
                   </span>
                 )}
               </div>
               <div style={{ textAlign:'center' }}>
-                <p style={{ fontFamily:DISPLAY, fontSize:'clamp(15px,4.5vw,18px)', fontWeight:800, color:C.text, margin:0, letterSpacing:'-0.02em' }}>
+                <p style={{ fontFamily:DISPLAY, fontSize:'clamp(14px,4vw,17px)', fontWeight:800, color:C.text, margin:0, letterSpacing:'-0.02em' }}>
                   {name || 'Загрузка...'}
                 </p>
-                {username && <p style={{ fontFamily:BODY, fontSize:'12px', color:C.textMuted, margin:'2px 0 0' }}>{username}</p>}
+                {username && <p style={{ fontFamily:BODY, fontSize:'11px', color:C.textMuted, margin:'1px 0 0' }}>{username}</p>}
                 {vpnConfig?.subscriptionUrl && (
                   <button
                     onClick={() => copyKey(vpnConfig.subscriptionUrl)}
-                    style={{ display:'inline-flex', alignItems:'center', gap:'4px', background:'none', border:'none', cursor:'pointer', padding:'4px 0', marginTop:'4px', WebkitTapHighlightColor:'transparent' }}
+                    style={{ display:'inline-flex', alignItems:'center', gap:'3px', background:'none', border:'none', cursor:'pointer', padding:'3px 0', marginTop:'3px', WebkitTapHighlightColor:'transparent' }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke={C.accent} strokeWidth="2" strokeLinecap="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke={C.accent} strokeWidth="2" strokeLinecap="round"/></svg>
-                    <span style={{ fontFamily:BODY, fontSize:'12px', fontWeight:600, color:C.accent }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke={C.accent} strokeWidth="2" strokeLinecap="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke={C.accent} strokeWidth="2" strokeLinecap="round"/></svg>
+                    <span style={{ fontFamily:BODY, fontSize:'11px', fontWeight:600, color:C.accent }}>
                       {copied ? '✓ Скопировано' : 'Ссылка на подписку'}
                     </span>
                   </button>
                 )}
-                {memberSince && <p style={{ fontFamily:BODY, fontSize:'11px', color:C.textMuted, margin:'2px 0 0' }}>С {memberSince}</p>}
+                {memberSince && <p style={{ fontFamily:BODY, fontSize:'10px', color:C.textMuted, margin:'1px 0 0' }}>С {memberSince}</p>}
               </div>
             </div>
 
@@ -166,18 +166,18 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
             {subActive ? (
               <div style={{ borderRadius:R.cardRadius, background:C.successSoft, overflow:'hidden', ...reveal(mounted,2) }}>
                 {/* Статус + срок */}
-                <div style={{ padding:`14px ${R.cardPadH}`, display:'flex', flexDirection:'column', gap:'10px' }}>
+                <div style={{ padding:`10px ${R.cardPadH}`, display:'flex', flexDirection:'column', gap:'8px' }}>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                      <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:C.success }} />
-                      <span style={{ fontFamily:BODY, fontSize:'13px', fontWeight:700, color:C.success }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                      <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:C.success }} />
+                      <span style={{ fontFamily:BODY, fontSize:'12px', fontWeight:700, color:C.success }}>
                         Подписка активна
                       </span>
                     </div>
-                    {subExpiry && <span style={{ fontFamily:BODY, fontSize:'12px', color:C.textMuted }}>до {subExpiry}</span>}
+                    {subExpiry && <span style={{ fontFamily:BODY, fontSize:'11px', color:C.textMuted }}>до {subExpiry}</span>}
                   </div>
                   {(planName || daysLeft !== null || devices !== null) && (
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'6px' }}>
                       {planName  && <SubStat label="Тариф"     value={planName} />}
                       {daysLeft !== null && <SubStat label="Осталось"  value={`${daysLeft} д.`} highlight={daysLeft <= 3} />}
                       {devices  !== null && <SubStat label="Устройств" value={String(devices)} />}
@@ -188,26 +188,39 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
                 {/* VPN ключ */}
                 {vpnConfig?.subscriptionUrl && (() => {
                   const key = vpnConfig.subscriptionUrl
+                  const happLink = `happ://install-config?url=${encodeURIComponent(key)}`
                   return (
-                    <div style={{ borderTop:`1px solid rgba(0,0,0,0.08)`, padding:`12px ${R.cardPadH}`, display:'flex', flexDirection:'column', gap:'8px' }}>
-                      <p style={{ fontFamily:BODY, fontSize:'11px', fontWeight:700, color:C.success, textTransform:'uppercase', letterSpacing:'0.06em', margin:0 }}>
+                    <div style={{ borderTop:`1px solid rgba(0,0,0,0.08)`, padding:`10px ${R.cardPadH}`, display:'flex', flexDirection:'column', gap:'6px' }}>
+                      <p style={{ fontFamily:BODY, fontSize:'10px', fontWeight:700, color:C.success, textTransform:'uppercase', letterSpacing:'0.06em', margin:0 }}>
                         Ссылка на подписку
                       </p>
-                      <div style={{ display:'flex', alignItems:'center', gap:'8px', background:'rgba(255,255,255,0.55)', borderRadius:'10px', padding:'10px 12px' }}>
-                        <span style={{ fontFamily:'monospace', fontSize:'11px', color:C.text, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'6px', background:'rgba(255,255,255,0.55)', borderRadius:'8px', padding:'8px 10px' }}>
+                        <span style={{ fontFamily:'monospace', fontSize:'10px', color:C.text, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                           {key}
                         </span>
                         <button
                           onClick={() => copyKey(key)}
-                          style={{ flexShrink:0, background:copied ? C.success : C.accent, border:'none', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', WebkitTapHighlightColor:'transparent', transition:'background 0.2s' }}
+                          style={{ flexShrink:0, background:copied ? C.success : C.accent, border:'none', borderRadius:'6px', padding:'6px 10px', cursor:'pointer', WebkitTapHighlightColor:'transparent', transition:'background 0.2s' }}
                         >
-                          <span style={{ fontFamily:BODY, fontSize:'12px', fontWeight:700, color:'#fff', whiteSpace:'nowrap' }}>
+                          <span style={{ fontFamily:BODY, fontSize:'11px', fontWeight:700, color:'#fff', whiteSpace:'nowrap' }}>
                             {copied ? '✓ Скопировано' : 'Копировать'}
                           </span>
                         </button>
                       </div>
-                      <p style={{ fontFamily:BODY, fontSize:'11px', color:C.textMuted, margin:0 }}>
-                        Используйте эту ссылку в Hiddify, HApp или другом VPN-приложении
+
+                      {/* Кнопка открытия в Happ */}
+                      <a
+                        href={happLink}
+                        style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'6px', background:C.accentSoft, border:`1.5px solid ${C.accent}`, borderRadius:'8px', padding:'8px 12px', textDecoration:'none', WebkitTapHighlightColor:'transparent' }}
+                      >
+                        <span style={{ fontSize:'14px' }}>📱</span>
+                        <span style={{ fontFamily:BODY, fontSize:'12px', fontWeight:700, color:C.accent }}>
+                          Открыть в Happ
+                        </span>
+                      </a>
+
+                      <p style={{ fontFamily:BODY, fontSize:'10px', color:C.textMuted, margin:0 }}>
+                        Нажмите кнопку выше для автоматического добавления в Happ
                       </p>
                     </div>
                   )
@@ -215,20 +228,20 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
               </div>
             ) : (
               <button onClick={() => onNavigate('subscription')}
-                style={{ display:'flex', alignItems:'center', gap:'8px', padding:`12px ${R.cardPadH}`, borderRadius:R.cardRadius, background:C.errorSoft, border:'none', cursor:'pointer', textAlign:'left', width:'100%', WebkitTapHighlightColor:'transparent', ...reveal(mounted,2) }}>
-                <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:C.error, flexShrink:0 }} />
-                <span style={{ fontFamily:BODY, fontSize:'13px', fontWeight:600, color:C.error, flex:1 }}>Нет активной подписки</span>
-                <span style={{ fontFamily:BODY, fontSize:'12px', color:C.error }}>Купить →</span>
+                style={{ display:'flex', alignItems:'center', gap:'6px', padding:`10px ${R.cardPadH}`, borderRadius:R.cardRadius, background:C.errorSoft, border:'none', cursor:'pointer', textAlign:'left', width:'100%', WebkitTapHighlightColor:'transparent', ...reveal(mounted,2) }}>
+                <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:C.error, flexShrink:0 }} />
+                <span style={{ fontFamily:BODY, fontSize:'12px', fontWeight:600, color:C.error, flex:1 }}>Нет активной подписки</span>
+                <span style={{ fontFamily:BODY, fontSize:'11px', color:C.error }}>Купить →</span>
               </button>
             )}
 
             {/* Мини-статистика */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', ...reveal(mounted,3) }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', ...reveal(mounted,3) }}>
               <StatCard
-                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="3" stroke={C.accent} strokeWidth="1.7"/><circle cx="16" cy="8" r="3" stroke={C.accent} strokeWidth="1.7"/><path d="M2 19c0-3 2.7-5 6-5M16 14c3.3 0 6 2 6 5" stroke={C.accent} strokeWidth="1.7" strokeLinecap="round"/><path d="M9.5 19c0-2.8.9-5 2.5-5s2.5 2.2 2.5 5" stroke={C.accent} strokeWidth="1.7" strokeLinecap="round"/></svg>}
+                icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="3" stroke={C.accent} strokeWidth="1.7"/><circle cx="16" cy="8" r="3" stroke={C.accent} strokeWidth="1.7"/><path d="M2 19c0-3 2.7-5 6-5M16 14c3.3 0 6 2 6 5" stroke={C.accent} strokeWidth="1.7" strokeLinecap="round"/><path d="M9.5 19c0-2.8.9-5 2.5-5s2.5 2.2 2.5 5" stroke={C.accent} strokeWidth="1.7" strokeLinecap="round"/></svg>}
                 label="Рефералов" value={String(invitedCount)} onClick={() => onNavigate('referral')} />
               <StatCard
-                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={C.accent} strokeWidth="1.7"/><path d="M12 7v5l3 3" stroke={C.accent} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={C.accent} strokeWidth="1.7"/><path d="M12 7v5l3 3" stroke={C.accent} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                 label="Транзакции" value="→" onClick={() => onNavigate('transaction-history')} />
             </div>
 
@@ -300,9 +313,9 @@ function AvatarIcon({ name }: { name: string | null }) {
 
 function SubStat({ label, value, highlight }: { label:string; value:string; highlight?:boolean }) {
   return (
-    <div style={{ background:'rgba(255,255,255,0.6)', borderRadius:'10px', padding:'7px 8px', textAlign:'center' }}>
-      <p style={{ fontFamily:DISPLAY, fontSize:'clamp(11px,3.5vw,14px)', fontWeight:800, color:highlight?C.error:C.text, margin:0, letterSpacing:'-0.02em' }}>{value}</p>
-      <p style={{ fontFamily:BODY, fontSize:'10px', color:C.textMuted, margin:'2px 0 0' }}>{label}</p>
+    <div style={{ background:'rgba(255,255,255,0.6)', borderRadius:'8px', padding:'5px 6px', textAlign:'center' }}>
+      <p style={{ fontFamily:DISPLAY, fontSize:'clamp(10px,3vw,12px)', fontWeight:800, color:highlight?C.error:C.text, margin:0, letterSpacing:'-0.02em' }}>{value}</p>
+      <p style={{ fontFamily:BODY, fontSize:'9px', color:C.textMuted, margin:'1px 0 0' }}>{label}</p>
     </div>
   )
 }
@@ -311,11 +324,11 @@ function StatCard({ icon, label, value, onClick }: { icon:React.ReactNode; label
   const [pressed, setPressed] = useState(false)
   return (
     <button onClick={onClick} onPointerDown={()=>setPressed(true)} onPointerUp={()=>setPressed(false)} onPointerLeave={()=>setPressed(false)}
-      style={{ display:'flex', alignItems:'center', gap:'10px', padding:'12px', borderRadius:R.cardRadius, background:C.cardLight, border:'none', cursor:'pointer', textAlign:'left', WebkitTapHighlightColor:'transparent', transform:pressed?'scale(0.96)':'scale(1)', transition:'transform 0.14s ease' }}>
+      style={{ display:'flex', alignItems:'center', gap:'8px', padding:'10px', borderRadius:R.cardRadius, background:C.cardLight, border:'none', cursor:'pointer', textAlign:'left', WebkitTapHighlightColor:'transparent', transform:pressed?'scale(0.96)':'scale(1)', transition:'transform 0.14s ease' }}>
       <div style={{ width:R.iconSz, height:R.iconSz, borderRadius:R.iconR, background:C.accentSoft, display:'grid', placeItems:'center', flexShrink:0 }}>{icon}</div>
       <div>
-        <p style={{ fontFamily:DISPLAY, fontSize:'clamp(14px,4.5vw,18px)', fontWeight:800, color:C.text, margin:0, letterSpacing:'-0.02em' }}>{value}</p>
-        <p style={{ fontFamily:BODY, fontSize:'11px', color:C.textMuted, margin:'2px 0 0' }}>{label}</p>
+        <p style={{ fontFamily:DISPLAY, fontSize:'clamp(13px,4vw,16px)', fontWeight:800, color:C.text, margin:0, letterSpacing:'-0.02em' }}>{value}</p>
+        <p style={{ fontFamily:BODY, fontSize:'10px', color:C.textMuted, margin:'1px 0 0' }}>{label}</p>
       </div>
     </button>
   )

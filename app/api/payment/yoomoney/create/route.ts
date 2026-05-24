@@ -4,9 +4,12 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { telegram_id, plan_id, devices_count = 1, promocode_id } = body
+    const { telegram_id, plan_id, extra_devices = 0, promocode_id, promocode } = body
+    const extraDevices = Math.max(0, Math.min(5, parseInt(extra_devices) || 0))
+    const devices_count = 1 + extraDevices
+    const EXTRA_DEVICE_PRICE = 90
 
-    console.log('YooMoney create request:', { telegram_id, plan_id, devices_count, promocode_id })
+    console.log('YooMoney create request:', { telegram_id, plan_id, extraDevices, promocode_id })
 
     if (!telegram_id || !plan_id) {
       return NextResponse.json({ error: 'telegram_id and plan_id are required' }, { status: 400 })
@@ -51,8 +54,8 @@ export async function POST(request: NextRequest) {
 
     console.log('Using plan:', plan)
 
-    // Calculate amount in RUB
-    let amountRub = plan.price_rub
+    // Calculate amount in RUB: plan + extra devices
+    let amountRub = Number(plan.price_rub) + extraDevices * EXTRA_DEVICE_PRICE
     let discountAmount = 0
 
     // Apply promocode if provided
@@ -96,16 +99,21 @@ export async function POST(request: NextRequest) {
     const subscription = subResult.rows[0]
 
     // Create YooMoney payment URL
-    const YOOMONEY_WALLET_ID = process.env.YOOMONEY_WALLET_ID
+    const YOOMONEY_WALLET = process.env.YOOMONEY_WALLET || process.env.YOOMONEY_WALLET_ID
     const paymentId = `${subscription.id}_${Date.now()}`
 
+    if (!YOOMONEY_WALLET) {
+      return NextResponse.json({ error: 'YOOMONEY_WALLET not configured' }, { status: 500 })
+    }
+
+    const targets = `ChampionVPN ${plan.name}${extraDevices ? ` + ${extraDevices} устр.` : ''}`
     const paymentUrl = `https://yoomoney.ru/quickpay/confirm?` +
-      `receiver=${YOOMONEY_WALLET_ID}` +
-      `&quickpay-form=shop` +
-      `&targets=ChampionVPN ${plan.name}` +
+      `receiver=${YOOMONEY_WALLET}` +
+      `&quickpay-form=button` +
+      `&targets=${encodeURIComponent(targets)}` +
       `&paymentType=SB` +
       `&sum=${amountRub}` +
-      `&label=${paymentId}`
+      `&label=${encodeURIComponent(paymentId)}`
 
     console.log('YooMoney payment URL created:', paymentUrl)
 
@@ -122,9 +130,10 @@ export async function POST(request: NextRequest) {
         JSON.stringify({
           plan_name: plan.name,
           devices_count,
+          extra_devices: extraDevices,
           duration_months: plan.duration_months,
           payment_url: paymentUrl,
-          promocode_id: promocode_id || null,
+          promocode_id: promocode_id || promocode || null,
           discount_amount: discountAmount
         })
       ]

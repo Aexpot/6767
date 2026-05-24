@@ -530,8 +530,8 @@ export function Divider({ label: lbl }: { label?: string }) {
 }
 
 /* ─────────────── HELPERS ─────────────── */
-export const fmtNum = (n: number) => n.toLocaleString('ru-RU')
-export const fmtRub = (n: number) => `${n.toLocaleString('ru-RU')} ₽`
+export const fmtNum = (n: number | string) => (Number(n) || 0).toLocaleString('ru-RU')
+export const fmtRub = (n: number | string) => `${(Number(n) || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽`
 export const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })
 export const fmtDateTime = (s: string) =>

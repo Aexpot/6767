@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { marzban, isMarzbanConfigured } from '@/lib/marzban'
+import { remnawave, isRemnawaveConfigured } from '@/lib/remnawave'
 import { validateInitData } from '@/lib/telegram'
 
 export async function POST(request: NextRequest) {
@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'telegram_id and months required' }, { status: 400 })
     }
 
-    // Check if Marzban is configured
-    if (!isMarzbanConfigured()) {
+    // Check if Remnawave is configured
+    if (!isRemnawaveConfigured()) {
       // Return demo data
       return NextResponse.json({
         success: true,
@@ -37,15 +37,15 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Create or update VPN user in Marzban
-    const user = await marzban.createVpnUser(telegram_id, months)
+    // Create or update VPN user in Remnawave
+    const user = await remnawave.createVpnUser(telegram_id, months)
 
     return NextResponse.json({
       success: true,
       username: user.username,
       expiresAt: user.expire ? new Date(user.expire * 1000).toISOString() : null,
       links: user.links,
-      subscriptionUrl: marzban.getSubscriptionUrl(user.username),
+      subscriptionUrl: remnawave.getSubscriptionUrl(user.username),
     })
   } catch (error) {
     console.error('Error creating VPN user:', error)

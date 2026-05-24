@@ -1,4 +1,4 @@
-// Create Marzban subscriptions for all active users including admins
+// Create Remnawave subscriptions for all active users including admins
 require('dotenv').config({ path: '.env' })
 const { Pool } = require('pg')
 
@@ -6,27 +6,27 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 })
 
-const MARZBAN_API_URL = process.env.MARZBAN_API_URL?.replace(/\/$/, '')
-const MARZBAN_USERNAME = process.env.MARZBAN_USERNAME
+const REMNAWAVE_API_URL = process.env.REMNAWAVE_API_URL?.replace(/\/$/, '')
+const REMNAWAVE_API_TOKEN = process.env.REMNAWAVE_API_TOKEN
 const MARZBAN_PASSWORD = process.env.MARZBAN_PASSWORD
 
 // Admin telegram IDs from .env
 const ADMIN_IDS = process.env.ADMIN_TELEGRAM_IDS?.split(',').map(id => id.trim()) || []
 
 async function getMarzbanToken() {
-  const response = await fetch(`${MARZBAN_API_URL}/api/admin/token`, {
+  const response = await fetch(`${REMNAWAVE_API_URL}/api/admin/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({
-      username: MARZBAN_USERNAME,
+      username: REMNAWAVE_API_TOKEN,
       password: MARZBAN_PASSWORD,
     }),
   })
 
   if (!response.ok) {
-    throw new Error('Failed to authenticate with Marzban')
+    throw new Error('Failed to authenticate with Remnawave')
   }
 
   const data = await response.json()
@@ -35,7 +35,7 @@ async function getMarzbanToken() {
 
 async function getMarzbanUser(token, telegramId) {
   const username = `tg_${telegramId}`
-  const response = await fetch(`${MARZBAN_API_URL}/api/user/${username}`, {
+  const response = await fetch(`${REMNAWAVE_API_URL}/api/user/${username}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
     },
@@ -52,7 +52,7 @@ async function createMarzbanUser(token, telegramId, expiresAt) {
   const username = `tg_${telegramId}`
   const expireTimestamp = Math.floor(new Date(expiresAt).getTime() / 1000)
 
-  const response = await fetch(`${MARZBAN_API_URL}/api/user`, {
+  const response = await fetch(`${REMNAWAVE_API_URL}/api/user`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -86,7 +86,7 @@ async function updateMarzbanUser(token, telegramId, expiresAt) {
   const username = `tg_${telegramId}`
   const expireTimestamp = Math.floor(new Date(expiresAt).getTime() / 1000)
 
-  const response = await fetch(`${MARZBAN_API_URL}/api/user/${username}`, {
+  const response = await fetch(`${REMNAWAVE_API_URL}/api/user/${username}`, {
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -111,8 +111,8 @@ async function createSubscriptionsForAll() {
   console.log('Админы:', ADMIN_IDS.join(', '), '\n')
 
   try {
-    // Get Marzban token
-    console.log('Шаг 1: Аутентификация в Marzban...')
+    // Get Remnawave token
+    console.log('Шаг 1: Аутентификация в Remnawave...')
     const token = await getMarzbanToken()
     console.log('✅ Аутентифицирован\n')
 
@@ -142,13 +142,13 @@ async function createSubscriptionsForAll() {
       console.log(`  Истекает: ${user.expires_at}`)
 
       try {
-        // Check if user exists in Marzban
+        // Check if user exists in Remnawave
         const existingUser = await getMarzbanUser(token, user.telegram_id)
 
         if (existingUser) {
           // Update existing user
           const updatedUser = await updateMarzbanUser(token, user.telegram_id, user.expires_at)
-          console.log(`  ✅ Обновлен в Marzban`)
+          console.log(`  ✅ Обновлен в Remnawave`)
           console.log(`     Status: ${updatedUser.status}`)
           console.log(`     Expires: ${new Date(updatedUser.expire * 1000).toISOString()}`)
           console.log(`     Links: ${updatedUser.links?.length || 0}`)
@@ -156,12 +156,12 @@ async function createSubscriptionsForAll() {
         } else {
           // Create new user
           const newUser = await createMarzbanUser(token, user.telegram_id, user.expires_at)
-          console.log(`  ✅ Создан в Marzban`)
+          console.log(`  ✅ Создан в Remnawave`)
           console.log(`     Username: ${newUser.username}`)
           console.log(`     Status: ${newUser.status}`)
           console.log(`     Expires: ${new Date(newUser.expire * 1000).toISOString()}`)
           console.log(`     Links: ${newUser.links?.length || 0}`)
-          console.log(`     Subscription URL: ${MARZBAN_API_URL}${newUser.subscription_url}`)
+          console.log(`     Subscription URL: ${REMNAWAVE_API_URL}${newUser.subscription_url}`)
           created++
         }
       } catch (error) {

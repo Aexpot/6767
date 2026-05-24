@@ -1,6 +1,6 @@
 import { query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { marzban, isMarzbanConfigured } from '@/lib/marzban'
+import { remnawave, isRemnawaveConfigured } from '@/lib/remnawave'
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,10 +33,10 @@ export async function GET(request: NextRequest) {
 
     const subscription = subResult.rows[0]
 
-    // Get VPN subscription URL from Marzban
-    if (isMarzbanConfigured()) {
+    // Get VPN subscription URL from Remnawave
+    if (isRemnawaveConfigured()) {
       try {
-        const vpnData = await marzban.checkSubscription(parseInt(telegram_id))
+        const vpnData = await remnawave.checkSubscription(parseInt(telegram_id))
 
         if (vpnData && vpnData.active) {
           return NextResponse.json({
@@ -53,15 +53,15 @@ export async function GET(request: NextRequest) {
           })
         }
       } catch (error) {
-        console.error('Marzban error:', error)
+        console.error('Remnawave error:', error)
       }
     }
 
-    // Fallback if Marzban is not available
+    // Fallback if Remnawave is not available
     // Try to get subscription URL anyway
     let subscriptionUrl = ''
     try {
-      subscriptionUrl = await marzban.getSubscriptionUrlWithToken(parseInt(telegram_id))
+      subscriptionUrl = await remnawave.getSubscriptionUrlWithToken(parseInt(telegram_id))
     } catch (err) {
       console.error('Failed to get subscription URL:', err)
     }

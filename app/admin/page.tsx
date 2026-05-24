@@ -55,10 +55,10 @@ interface AdminPayment {
 interface SystemSettings {
   maintenance_mode: boolean
   maintenance_message: string
-  marzban_configured: boolean
+  remnawave_configured: boolean
 }
 
-interface MarzbanStatus {
+interface RemnawaveStatus {
   status: 'online' | 'offline' | 'checking'
   version?: string
   total_users?: number
@@ -151,7 +151,7 @@ export default function AdminPage() {
   const [faqItems, setFaqItems] = useState<FaqItem[]>([])
   const [newsItems, setNewsItems] = useState<NewsItem[]>([])
   const [settings, setSettings] = useState<SystemSettings | null>(null)
-  const [marzbanStatus, setMarzbanStatus] = useState<MarzbanStatus>({ status: 'checking' })
+  const [remnawaveStatus, setRemnawaveStatus] = useState<RemnawaveStatus>({ status: 'checking' })
 
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -322,20 +322,20 @@ export default function AdminPage() {
     } catch (e) { console.error(e) } finally { setIsLoading(false) }
   }, [telegramId])
 
-  const checkMarzbanStatus = useCallback(async () => {
+  const checkRemnawaveStatus = useCallback(async () => {
     if (!telegramId) return
-    setMarzbanStatus({ status: 'checking' })
+    setRemnawaveStatus({ status: 'checking' })
     try {
       const r = await fetch(`/api/admin/settings?telegram_id=${telegramId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'check_marzban' }),
+        body: JSON.stringify({ action: 'check_remnawave' }),
       })
       const d = await r.json()
-      if (d.success) setMarzbanStatus({ status: 'online', ...d.data })
-      else setMarzbanStatus({ status: 'offline', error: d.error })
+      if (d.success) setRemnawaveStatus({ status: 'online', ...d.data })
+      else setRemnawaveStatus({ status: 'offline', error: d.error })
     } catch (err: any) {
-      setMarzbanStatus({ status: 'offline', error: err?.message })
+      setRemnawaveStatus({ status: 'offline', error: err?.message })
     }
   }, [telegramId])
 
@@ -345,7 +345,7 @@ export default function AdminPage() {
     // Apply immediately in UI — don't block on network
     setSettings(prev => prev ? { ...prev, ...updates } : prev)
     try {
-      const cur = settings ?? { maintenance_mode: false, maintenance_message: '', marzban_configured: false }
+      const cur = settings ?? { maintenance_mode: false, maintenance_message: '', remnawave_configured: false }
       const r = await fetch(`/api/admin/settings?telegram_id=${telegramId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -562,7 +562,7 @@ export default function AdminPage() {
     else if (activeTab === 'payments') fetchPayments(1)
     else if (activeTab === 'faq') fetchFaq()
     else if (activeTab === 'news') fetchNews()
-    else if (activeTab === 'settings') checkMarzbanStatus()
+    else if (activeTab === 'settings') checkRemnawaveStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, searchQuery, telegramId])
 
@@ -924,7 +924,7 @@ export default function AdminPage() {
           <SettingsView
             settings={settings} setSettings={setSettings as any}
             onUpdate={updateSettings}
-            marzbanStatus={marzbanStatus} onCheckMarzban={checkMarzbanStatus}
+            remnawaveStatus={remnawaveStatus} onCheckRemnawave={checkRemnawaveStatus}
             onOpenDelete={() => setShowDeleteAllModal(true)}
             telegramId={telegramId!}
           />
@@ -1255,14 +1255,17 @@ function AnalyticsView({ stats, loading }: { stats: PaymentStats | null; loading
           <Table head={['Метод', 'Платежей', 'Сумма', 'Средний']}>
             {stats.payment_methods.length === 0 ? (
               <tr><td colSpan={4} style={tdEmpty}>Нет данных</td></tr>
-            ) : stats.payment_methods.map((m, i) => (
-              <tr key={i} style={trStyle(i, stats.payment_methods.length)}>
-                <td style={td}>{m.payment_method || '—'}</td>
-                <td style={tdNum}>{fmtNum(m.count)}</td>
-                <td style={tdNum}>{fmtRub(m.total_amount)}</td>
-                <td style={tdNum}>{fmtRub(Math.round(m.avg_amount))}</td>
-              </tr>
-            ))}
+            ) : stats.payment_methods.map((m, i) => {
+              const methodLabel = m.payment_method === 'crypto' ? '💎 CryptoPay' : m.payment_method === 'yoomoney' ? '💳 ЮMoney' : m.payment_method || '—'
+              return (
+                <tr key={i} style={trStyle(i, stats.payment_methods.length)}>
+                  <td style={td}>{methodLabel}</td>
+                  <td style={tdNum}>{fmtNum(m.count)}</td>
+                  <td style={tdNum}>{fmtRub(m.total_amount)}</td>
+                  <td style={tdNum}>{fmtRub(Math.round(m.avg_amount))}</td>
+                </tr>
+              )
+            })}
           </Table>
         </div>
       </section>
@@ -1730,14 +1733,14 @@ function NewsView({ items, loading, onCreate, onEdit, onToggle, onDelete }: any)
 ═══════════════════════════════════════════ */
 function SettingsView({
   settings, setSettings, onUpdate,
-  marzbanStatus, onCheckMarzban,
+  remnawaveStatus, onCheckRemnawave,
   onOpenDelete, telegramId,
 }: {
   settings: SystemSettings
   setSettings: (s: SystemSettings) => void
   onUpdate: (u: Partial<SystemSettings>) => Promise<void>
-  marzbanStatus: MarzbanStatus
-  onCheckMarzban: () => void
+  remnawaveStatus: RemnawaveStatus
+  onCheckRemnawave: () => void
   onOpenDelete: () => void
   telegramId: string
 }) {
@@ -1788,9 +1791,9 @@ function SettingsView({
         </div>
       </section>
 
-      {/* Marzban */}
+      {/* Remnawave */}
       <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <p style={sectionStyle}>Marzban API</p>
+        <p style={sectionStyle}>Remnawave API</p>
         <div style={{ ...card, padding: 0 }}>
           <div style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1800,66 +1803,66 @@ function SettingsView({
                   VPN-сервер
                 </p>
                 <p style={{ fontFamily: FONT, fontSize: 12, color: T.muted, margin: '2px 0 0' }}>
-                  {settings.marzban_configured ? 'Подключение к серверу VPN' : 'API не настроен в .env'}
+                  {settings.remnawave_configured ? 'Подключение к серверу VPN' : 'API не настроен в .env'}
                 </p>
               </div>
             </div>
-            {settings.marzban_configured && (
+            {settings.remnawave_configured && (
               <button
-                onClick={onCheckMarzban}
-                disabled={marzbanStatus.status === 'checking'}
-                style={{ ...btn('outline'), opacity: marzbanStatus.status === 'checking' ? 0.5 : 1 }}
+                onClick={onCheckRemnawave}
+                disabled={remnawaveStatus.status === 'checking'}
+                style={{ ...btn('outline'), opacity: remnawaveStatus.status === 'checking' ? 0.5 : 1 }}
               >
                 <ArrowsClockwise size={13} weight="bold" />
-                {marzbanStatus.status === 'checking' ? 'Проверка' : 'Проверить'}
+                {remnawaveStatus.status === 'checking' ? 'Проверка' : 'Проверить'}
               </button>
             )}
           </div>
 
-          {settings.marzban_configured && marzbanStatus.status === 'online' && (
+          {settings.remnawave_configured && remnawaveStatus.status === 'online' && (
             <div style={{ borderTop: `1px solid ${T.line}`, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.ok, flexShrink: 0 }} />
               <span style={{ fontFamily: FONT, fontSize: 13, color: T.ok, fontWeight: 600 }}>Сервер онлайн</span>
             </div>
           )}
 
-          {settings.marzban_configured && marzbanStatus.status === 'online' && (
+          {settings.remnawave_configured && remnawaveStatus.status === 'online' && (
             <div style={{
               borderTop: `1px solid ${T.line}`,
               display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
             }}>
-              <MetaCell label="Версия"            value={marzbanStatus.version || '—'} />
-              <MetaCell label="Пользователей"     value={fmtNum(marzbanStatus.total_users || 0)} divider />
-              <MetaCell label="Активных"          value={fmtNum(marzbanStatus.active_users || 0)} divider />
-              <MetaCell label="CPU ядер"          value={String(marzbanStatus.cpu_cores ?? '—')} divider />
-              <MetaCell label="Загрузка CPU"      value={marzbanStatus.cpu_usage != null ? `${marzbanStatus.cpu_usage.toFixed(1)}%` : '—'} divider />
+              <MetaCell label="Версия"            value={remnawaveStatus.version || '—'} />
+              <MetaCell label="Пользователей"     value={fmtNum(remnawaveStatus.total_users || 0)} divider />
+              <MetaCell label="Активных"          value={fmtNum(remnawaveStatus.active_users || 0)} divider />
+              <MetaCell label="CPU ядер"          value={String(remnawaveStatus.cpu_cores ?? '—')} divider />
+              <MetaCell label="Загрузка CPU"      value={remnawaveStatus.cpu_usage != null ? `${remnawaveStatus.cpu_usage.toFixed(1)}%` : '—'} divider />
               <MetaCell label="Память"            value={
-                marzbanStatus.mem_used != null && marzbanStatus.mem_total
-                  ? `${((marzbanStatus.mem_used / marzbanStatus.mem_total) * 100).toFixed(1)}%`
+                remnawaveStatus.mem_used != null && remnawaveStatus.mem_total
+                  ? `${((remnawaveStatus.mem_used / remnawaveStatus.mem_total) * 100).toFixed(1)}%`
                   : '—'
               } divider />
             </div>
           )}
 
-          {settings.marzban_configured && marzbanStatus.status === 'offline' && (
+          {settings.remnawave_configured && remnawaveStatus.status === 'offline' && (
             <div style={{ borderTop: `1px solid ${T.line}`, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT, fontSize: 13, color: T.bad, fontWeight: 600 }}>
                 <Warning size={14} weight="fill" /> Сервер недоступен
               </span>
-              {marzbanStatus.error && (
+              {remnawaveStatus.error && (
                 <p style={{ ...mono, fontSize: 11, color: T.bad, margin: 0, wordBreak: 'break-all' }}>
-                  {marzbanStatus.error}
+                  {remnawaveStatus.error}
                 </p>
               )}
             </div>
           )}
 
-          {!settings.marzban_configured && (
+          {!settings.remnawave_configured && (
             <div style={{ borderTop: `1px solid ${T.line}`, padding: 16 }}>
               <p style={{ fontFamily: FONT, fontSize: 12, color: T.warn, margin: 0 }}>
                 Настройте переменные окружения:{' '}
                 <code style={{ ...mono, fontSize: 11, color: T.body }}>
-                  MARZBAN_API_URL, MARZBAN_USERNAME, MARZBAN_PASSWORD
+                  REMNAWAVE_API_URL, REMNAWAVE_API_TOKEN
                 </code>
               </p>
             </div>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { marzban, isMarzbanConfigured } from '@/lib/marzban'
+import { remnawave, isRemnawaveConfigured } from '@/lib/remnawave'
 
 export async function GET(request: NextRequest) {
   const telegramId = request.nextUrl.searchParams.get('telegram_id')
@@ -8,8 +8,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'telegram_id required' }, { status: 400 })
   }
 
-  // Check if Marzban is configured
-  if (!isMarzbanConfigured()) {
+  // Check if Remnawave is configured
+  if (!isRemnawaveConfigured()) {
     // Return demo data
     return NextResponse.json({
       active: true,
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const status = await marzban.checkSubscription(parseInt(telegramId))
+    const status = await remnawave.checkSubscription(parseInt(telegramId))
 
     if (!status) {
       return NextResponse.json({
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       usedTraffic: status.usedTraffic,
       dataLimit: status.dataLimit,
       links: status.links,
-      subscriptionUrl: marzban.getSubscriptionUrl(`tg_${telegramId}`),
+      subscriptionUrl: remnawave.getSubscriptionUrl(`tg_${telegramId}`),
     })
   } catch (error) {
     console.error('Error fetching VPN status:', error)
