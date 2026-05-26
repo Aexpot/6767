@@ -57,6 +57,24 @@ async def send_main_menu(
     session: AsyncSession,
     is_edit: bool = False,
 ):
+    """
+    MidasVPN-style main menu: shows user ID, balance, subscription info + 9 buttons.
+    Falls back to original menu if midas_menu import fails.
+    """
+    try:
+        from bot.handlers.user.midas_menu import send_midas_main_menu
+        await send_midas_main_menu(
+            target_event,
+            settings=settings,
+            subscription_service=subscription_service,
+            session=session,
+            is_edit=is_edit,
+        )
+        return
+    except Exception as exc:
+        logging.warning("send_main_menu: midas_menu failed (%s), falling back to legacy", exc)
+
+    # ── Legacy fallback ──────────────────────────────────────────────────
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
 
@@ -1079,6 +1097,15 @@ async def main_action_callback_handler(
         except Exception:
             await callback.message.answer(_(key="info_links_message"), reply_markup=reply_markup)
         await safe_answer_callback(callback)
+    elif action == "subscription_management":
+        # Delegate to MidasVPN management handler
+        from bot.handlers.user import midas_manage
+        await midas_manage.manage_menu(
+            callback,
+            subscription_service=subscription_service,
+            session=session,
+        )
+        return
     elif action == "back_to_main":
         await send_main_menu(
             callback, settings, i18n_data, subscription_service, session, is_edit=True

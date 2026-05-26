@@ -291,6 +291,12 @@ class UserBilling(Base):
     yookassa_payment_method_id = Column(String, nullable=True, unique=True)
     card_last4 = Column(String, nullable=True)
     card_network = Column(String, nullable=True)
+    # Internal balance in kopecks (1/100 RUB) — used for balance top-up & pay-from-balance
+    balance_kopecks = Column(BigInteger, nullable=False, default=0)
+    # Total referral earnings in kopecks (for display/withdrawal)
+    referral_earned_kopecks = Column(BigInteger, nullable=False, default=0)
+    # Pending withdrawal request amount in kopecks
+    referral_withdrawal_pending_kopecks = Column(BigInteger, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
@@ -321,13 +327,17 @@ class PromoCode(Base):
 
     promo_code_id = Column(Integer, primary_key=True, autoincrement=True)
     code = Column(String, unique=True, nullable=False, index=True)
-    bonus_days = Column(Integer, nullable=False)
+    bonus_days = Column(Integer, nullable=False, default=0)
     max_activations = Column(Integer, nullable=False)
     current_activations = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_by_admin_id = Column(BigInteger, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     valid_until = Column(DateTime(timezone=True), nullable=True)
+    # Extended promo fields (MidasVPN-style)
+    discount_percent = Column(Float, nullable=True)          # e.g. 10.0 = 10% discount on payment
+    bonus_balance_kopecks = Column(BigInteger, nullable=True)  # credited to user balance
+    bonus_traffic_bytes = Column(BigInteger, nullable=True)    # added to subscription traffic
 
     activations = relationship(
         "PromoCodeActivation", back_populates="promo_code", cascade="all, delete-orphan"

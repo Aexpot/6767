@@ -197,3 +197,57 @@ async def user_has_saved_payment_method(
         return bool(billing and billing.yookassa_payment_method_id)
     except Exception:
         return False
+
+
+# ─── Balance operations ────────────────────────────────────────────────────
+
+
+async def ensure_user_billing(session: AsyncSession, user_id: int) -> "UserBilling":
+    """Get or create UserBilling row for user."""
+    record = await get_user_billing(session, user_id)
+    if not record:
+        record = UserBilling(user_id=user_id, balance_kopecks=0)
+        session.add(record)
+        await session.flush()
+        await session.refresh(record)
+    return record
+
+
+async def get_balance_kopecks(session: AsyncSession, user_id: int) -> int:
+    """Return current balance in kopecks (0 if no record)."""
+    record = await get_user_billing(session, user_id)
+    if not record:
+        return 0
+    return record.balance_kopecks or 0
+
+
+async def add_balance_kopecks(session: AsyncSession, user_id: int, amount: int) -> int:
+    """Add *amount* kopecks to user balance. Returns new balance."""
+    record = await ensure_user_billing(session, user_id)
+    record.balance_kopecks = (record.balance_kopecks or 0) + amount
+    await session.flush()
+    await session.refresh(record)
+    return record.balance_kopecks
+
+
+async def deduct_balance_kopecks(session: AsyncSession, user_id: int, amount: int) -> bool:
+    """Deduct *amount* kopecks from user balance. Returns False if insufficient."""
+    record = await ensure_user_billing(session, user_id)
+    current = record.balance_kopecks or 0
+    if current < amount:
+        return False
+    record.balance_kopecks = current - amount
+    await session.flush()
+    return True
+
+
+async def add_referral_earnings_kopecks(
+    session: AsyncSession, user_id: int, amount: int
+) -> int:
+    """Credit referral earnings (also adds to spendable balance). Returns new total earned."""
+    record = await ensure_user_billing(session, user_id)
+    record.referral_earned_kopecks = (record.referral_earned_kopecks or 0) + amount
+    record.balance_kopecks = (record.balance_kopecks or 0) + amount
+    await session.flush()
+    await session.refresh(record)
+    return record.referral_earned_kopecks

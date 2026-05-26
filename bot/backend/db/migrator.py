@@ -882,6 +882,50 @@ def _migration_0026_add_lifetime_traffic_synced_at(connection: Connection) -> No
         )
 
 
+def _migration_0027_add_user_billing_balance_fields(connection: Connection) -> None:
+    """MidasVPN: add balance_kopecks, referral_earned_kopecks, referral_withdrawal_pending_kopecks."""
+    inspector = inspect(connection)
+    # user_billing table may not exist yet if the bot was freshly installed (models.py creates it).
+    # We only add columns if the table exists.
+    table_names = inspector.get_table_names()
+    if "user_billing" not in table_names:
+        return
+    columns: Set[str] = {col["name"] for col in inspector.get_columns("user_billing")}
+    statements: List[str] = []
+    if "balance_kopecks" not in columns:
+        statements.append(
+            "ALTER TABLE user_billing ADD COLUMN balance_kopecks BIGINT NOT NULL DEFAULT 0"
+        )
+    if "referral_earned_kopecks" not in columns:
+        statements.append(
+            "ALTER TABLE user_billing ADD COLUMN referral_earned_kopecks BIGINT NOT NULL DEFAULT 0"
+        )
+    if "referral_withdrawal_pending_kopecks" not in columns:
+        statements.append(
+            "ALTER TABLE user_billing ADD COLUMN referral_withdrawal_pending_kopecks BIGINT NOT NULL DEFAULT 0"  # noqa: E501
+        )
+    for stmt in statements:
+        connection.execute(text(stmt))
+
+
+def _migration_0028_add_promo_code_extended_fields(connection: Connection) -> None:
+    """MidasVPN: add discount_percent, bonus_balance_kopecks, bonus_traffic_bytes to promo_codes."""
+    inspector = inspect(connection)
+    table_names = inspector.get_table_names()
+    if "promo_codes" not in table_names:
+        return
+    columns: Set[str] = {col["name"] for col in inspector.get_columns("promo_codes")}
+    statements: List[str] = []
+    if "discount_percent" not in columns:
+        statements.append("ALTER TABLE promo_codes ADD COLUMN discount_percent FLOAT")
+    if "bonus_balance_kopecks" not in columns:
+        statements.append("ALTER TABLE promo_codes ADD COLUMN bonus_balance_kopecks BIGINT")
+    if "bonus_traffic_bytes" not in columns:
+        statements.append("ALTER TABLE promo_codes ADD COLUMN bonus_traffic_bytes BIGINT")
+    for stmt in statements:
+        connection.execute(text(stmt))
+
+
 MIGRATIONS: List[Migration] = [
     Migration(
         id="0001_add_channel_subscription_fields",
@@ -1023,6 +1067,16 @@ MIGRATIONS: List[Migration] = [
         id="0026_add_lifetime_traffic_synced_at",
         description="Track when lifetime traffic usage was last synced from panel",
         upgrade=_migration_0026_add_lifetime_traffic_synced_at,
+    ),
+    Migration(
+        id="0027_add_user_billing_balance_fields",
+        description="MidasVPN: add balance_kopecks + referral_earned/pending columns to user_billing",
+        upgrade=_migration_0027_add_user_billing_balance_fields,
+    ),
+    Migration(
+        id="0028_add_promo_code_extended_fields",
+        description="MidasVPN: add discount_percent, bonus_balance_kopecks, bonus_traffic_bytes to promo_codes",
+        upgrade=_migration_0028_add_promo_code_extended_fields,
     ),
 ]
 
