@@ -10,6 +10,8 @@ interface ProfileScreenProps { onNavigate: (screen: Screen) => void }
 
 const menuItems = [
   { id:'subscription', label:'Подписка',           sub:'Текущий план и оплата',   icon:<SubIcon />,    screen:'subscription'        as Screen },
+  { id:'devices',      label:'Мои устройства',     sub:'Подключённые устройства',  icon:<DevicesIcon />, screen:'devices'             as Screen },
+  { id:'wl-traffic',   label:'Трафик белых списков', sub:'Остаток и докупка',      icon:<TrafficIcon />, screen:'whitelist-traffic'   as Screen },
   { id:'history',      label:'История платежей',   sub:'Все транзакции',           icon:<HistIcon />,   screen:'transaction-history' as Screen },
   { id:'referral',     label:'Реферальная',        sub:'Приглашайте друзей',       icon:<RefIcon />,    screen:'referral'            as Screen },
   { id:'access',       label:'Сохранение доступа', sub:'Резервные способы',        icon:<AccessIcon />, screen:'access-preservation' as Screen },
@@ -183,6 +185,75 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
                       {devices  !== null && <SubStat label="Устройств" value={String(devices)} />}
                     </div>
                   )}
+
+                  {/* Traffic bar */}
+                  {(() => {
+                    const used = ctx.vpnConfig?.usedTraffic ?? 0
+                    const limit = ctx.vpnConfig?.dataLimit ?? null
+                    if (limit === null && used === 0) return null
+                    const usedGb = used / (1024 * 1024 * 1024)
+                    const limitGb = limit ? limit / (1024 * 1024 * 1024) : null
+                    const pct = limitGb ? Math.min(100, (usedGb / limitGb) * 100) : 0
+                    const barColor = pct > 85 ? C.error : pct > 60 ? C.warning : C.success
+                    return (
+                      <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <span style={{ fontFamily:BODY, fontSize:'10px', fontWeight:600, color:C.success, textTransform:'uppercase', letterSpacing:'0.05em' }}>Трафик</span>
+                          <span style={{ fontFamily:BODY, fontSize:'10px', color:C.textMuted }}>
+                            {usedGb.toFixed(2)} ГБ {limitGb ? `/ ${limitGb.toFixed(0)} ГБ` : '(безлимит)'}
+                          </span>
+                        </div>
+                        {limitGb && (
+                          <div style={{ height:'5px', borderRadius:'3px', background:'rgba(0,0,0,0.08)', overflow:'hidden' }}>
+                            <div style={{ height:'100%', width:`${pct}%`, borderRadius:'3px', background:barColor, transition:'width 0.5s ease' }} />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Whitelist traffic bar */}
+                  {(() => {
+                    const wlUsed = (sub as any)?.whitelist_traffic_used ?? 0
+                    const wlLimit = (sub as any)?.whitelist_traffic_limit ?? (15 * 1024 * 1024 * 1024)
+                    const wlUsedGb = wlUsed / (1024 * 1024 * 1024)
+                    const wlLimitGb = wlLimit / (1024 * 1024 * 1024)
+                    const wlPct = Math.min(100, (wlUsedGb / wlLimitGb) * 100)
+                    const wlColor = wlPct > 85 ? C.error : '#4A6EF5'
+                    return (
+                      <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <span style={{ fontFamily:BODY, fontSize:'10px', fontWeight:600, color:'#4A6EF5', textTransform:'uppercase', letterSpacing:'0.05em' }}>Белые списки</span>
+                          <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                            <span style={{ fontFamily:BODY, fontSize:'10px', color:C.textMuted }}>
+                              {wlUsedGb.toFixed(2)} / {wlLimitGb.toFixed(0)} ГБ
+                            </span>
+                            <button onClick={() => onNavigate('whitelist-traffic')}
+                              style={{ fontFamily:BODY, fontSize:'9px', fontWeight:700, color:'#4A6EF5', background:'#4A6EF510', border:`1px solid #4A6EF530`, borderRadius:'4px', padding:'1px 5px', cursor:'pointer', lineHeight:1.4 }}>
+                              + ГБ
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ height:'5px', borderRadius:'3px', background:'rgba(0,0,0,0.08)', overflow:'hidden' }}>
+                          <div style={{ height:'100%', width:`${wlPct}%`, borderRadius:'3px', background:wlColor, transition:'width 0.5s ease' }} />
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Devices count */}
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="5" y="2" width="14" height="20" rx="2" stroke={C.success} strokeWidth="1.7"/><path d="M12 18h.01" stroke={C.success} strokeWidth="1.7" strokeLinecap="round"/></svg>
+                      <span style={{ fontFamily:BODY, fontSize:'11px', color:C.success, fontWeight:600 }}>
+                        {devices !== null ? `${devices} устройств подключено` : 'Устройства'}
+                      </span>
+                    </div>
+                    <button onClick={() => onNavigate('devices')}
+                      style={{ fontFamily:BODY, fontSize:'10px', fontWeight:700, color:C.success, background:'rgba(43,182,115,0.1)', border:'1px solid rgba(43,182,115,0.25)', borderRadius:'5px', padding:'2px 7px', cursor:'pointer' }}>
+                      Управлять
+                    </button>
+                  </div>
                 </div>
 
                 {/* VPN ключ */}
@@ -254,36 +325,7 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
               </button>
             )}
 
-            {/* Ссылка на подписку */}
-            {vpnConfig?.subscription_url && (
-              <div style={{ ...reveal(mounted,4) }}>
-                <a 
-                  href={vpnConfig.subscription_url}
-                  target="_blank"
-                  style={{ 
-                    display:'flex', 
-                    alignItems:'center', 
-                    justifyContent:'center', 
-                    gap:'8px', 
-                    padding:'12px', 
-                    borderRadius:R.cardRadius, 
-                    background:C.accentSoft, 
-                    textDecoration:'none',
-                    WebkitTapHighlightColor:'transparent',
-                    transition:'background 0.2s'
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 2a4 4 0 0 1 4 4v2H8V6a4 4 0 0 1 4-4z" stroke={C.accent} strokeWidth="1.7"/>
-                    <rect x="4" y="8" width="16" height="13" rx="2" stroke={C.accent} strokeWidth="1.7"/>
-                    <circle cx="12" cy="14" r="2" fill={C.accent}/>
-                  </svg>
-                  <span style={{ fontFamily:BODY, fontSize:'13px', fontWeight:600, color:C.accent }}>
-                    Получить подписку
-                  </span>
-                </a>
-              </div>
-            )}
+
 
             <div style={{ height:'1px', background:C.border, margin:'2px 0' }} />
 
@@ -355,5 +397,7 @@ function SubIcon()    { return <svg width="20" height="20" viewBox="0 0 24 24" f
 function HistIcon()   { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#00C9BE" strokeWidth="1.7"/><path d="M12 7v5l3 3" stroke="#00C9BE" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function RefIcon()    { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="10" r="3" stroke="#00C9BE" strokeWidth="1.7"/><circle cx="16" cy="10" r="3" stroke="#00C9BE" strokeWidth="1.7"/><path d="M2 20c0-3 2.7-5 6-5M16 15c3.3 0 6 2 6 5" stroke="#00C9BE" strokeWidth="1.7" strokeLinecap="round"/><path d="M10 20c0-3 1-5 2-5s2 2 2 5" stroke="#00C9BE" strokeWidth="1.7" strokeLinecap="round"/></svg> }
 function AccessIcon() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2a4 4 0 0 1 4 4v2H8V6a4 4 0 0 1 4-4z" stroke="#00C9BE" strokeWidth="1.7"/><rect x="4" y="8" width="16" height="13" rx="2" stroke="#00C9BE" strokeWidth="1.7"/><circle cx="12" cy="14" r="2" fill="#00C9BE"/></svg> }
-function FaqIcon()    { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#00C9BE" strokeWidth="1.7"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-3 2.5-3 5" stroke="#00C9BE" strokeWidth="1.7" strokeLinecap="round"/><circle cx="12" cy="18.5" r="1" fill="#00C9BE"/></svg> }
-function TermsIcon()  { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="14" height="18" rx="2" stroke="#00C9BE" strokeWidth="1.7"/><path d="M9 8h6M9 12h6M9 16h4" stroke="#00C9BE" strokeWidth="1.7" strokeLinecap="round"/></svg> }
+function FaqIcon()     { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#00C9BE" strokeWidth="1.7"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-3 2.5-3 5" stroke="#00C9BE" strokeWidth="1.7" strokeLinecap="round"/><circle cx="12" cy="18.5" r="1" fill="#00C9BE"/></svg> }
+function TermsIcon()   { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="14" height="18" rx="2" stroke="#00C9BE" strokeWidth="1.7"/><path d="M9 8h6M9 12h6M9 16h4" stroke="#00C9BE" strokeWidth="1.7" strokeLinecap="round"/></svg> }
+function DevicesIcon() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="5" y="2" width="14" height="20" rx="2" stroke="#00C9BE" strokeWidth="1.7"/><path d="M12 18h.01" stroke="#00C9BE" strokeWidth="1.7" strokeLinecap="round"/><path d="M9 5h6" stroke="#00C9BE" strokeWidth="1.4" strokeLinecap="round" opacity=".5"/></svg> }
+function TrafficIcon() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 18h18M3 14h12M3 10h8M3 6h5" stroke="#00C9BE" strokeWidth="1.7" strokeLinecap="round"/><circle cx="19" cy="10" r="3" stroke="#00C9BE" strokeWidth="1.5"/><path d="M19 8v2l1.2 1.2" stroke="#00C9BE" strokeWidth="1.3" strokeLinecap="round"/></svg> }

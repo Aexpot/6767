@@ -461,6 +461,47 @@ class RemnawaveClient {
       })
     }
   }
+
+  async getUserDevices(telegramId: number): Promise<{ hwid: string; deviceModel: string | null; platform: string | null; osVersion: string | null; userAgent: string | null; createdAt: string | null }[]> {
+    const username = `tg_${telegramId}`
+    try {
+      const raw = await this.getRawByUsername(username)
+      // Remnawave HWID devices endpoint
+      const data = await this.request<{ response: any[] }>(`/api/users/${raw.uuid}/hwid`, {}, {})
+      const list: any[] = Array.isArray(data) ? data : ((data as any)?.devices ?? (data as any)?.hwids ?? [])
+      return list.map((d: any) => ({
+        hwid: d.hwid ?? d.id ?? String(d),
+        deviceModel: d.deviceModel ?? d.device_model ?? null,
+        platform: d.platform ?? null,
+        osVersion: d.osVersion ?? d.os_version ?? null,
+        userAgent: d.userAgent ?? d.user_agent ?? null,
+        createdAt: d.createdAt ?? d.created_at ?? null,
+      }))
+    } catch {
+      return []
+    }
+  }
+
+  async disconnectDevice(telegramId: number, hwid: string): Promise<boolean> {
+    const username = `tg_${telegramId}`
+    try {
+      const raw = await this.getRawByUsername(username)
+      await this.request(`/api/users/${raw.uuid}/hwid/${encodeURIComponent(hwid)}`, { method: 'DELETE' })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async getUserMaxDevices(telegramId: number): Promise<number> {
+    const username = `tg_${telegramId}`
+    try {
+      const raw = await this.getRawByUsername(username)
+      return (raw as any).hwidDeviceLimit ?? 3
+    } catch {
+      return 3
+    }
+  }
 }
 
 // Export singleton instance

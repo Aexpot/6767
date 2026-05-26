@@ -31,6 +31,8 @@ import { Loader2, Shield } from "lucide-react"
 
 import { FAQEditor } from "@/components/vpn/faq-editor"
 import { PricingEditor } from "@/components/vpn/pricing-editor"
+import { DevicesScreen } from "@/components/vpn/devices-screen"
+import { WhitelistTrafficScreen } from "@/components/vpn/whitelist-traffic-screen"
 
 export type Screen =
   | "home"
@@ -56,6 +58,8 @@ export type Screen =
   | "promocodes"
   | "terms"
   | "channel-required"
+  | "devices"
+  | "whitelist-traffic"
 
 function LoadingScreen() {
   return (
@@ -238,6 +242,10 @@ function VPNAppContent() {
         )
       case "terms":
         return <TermsScreen onNavigate={setCurrentScreen} />
+      case "devices":
+        return <DevicesScreen onNavigate={setCurrentScreen} />
+      case "whitelist-traffic":
+        return <WhitelistTrafficScreen onNavigate={setCurrentScreen} />
       default:
         return <HomeScreen isConnected={isConnected} setIsConnected={setIsConnected} onNavigate={setCurrentScreen} />
     }
@@ -262,6 +270,8 @@ function VPNAppContent() {
       case "referral":
       case "access-preservation":
       case "admin":
+      case "devices":
+      case "whitelist-traffic":
         return "profile"
       case "support":
       case "faq":

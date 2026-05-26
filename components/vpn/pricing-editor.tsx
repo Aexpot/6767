@@ -21,6 +21,12 @@ interface SubscriptionPlan {
   features: string[]
 }
 
+interface WlTrafficSettings {
+  price_per_gb: number
+  default_limit_gb: number
+  packages: Array<{ gb: number; price: number }>
+}
+
 interface PricingEditorProps {
   onBack: () => void
 }
@@ -28,12 +34,24 @@ interface PricingEditorProps {
 const monthsWord = (n: number) =>
   n === 1 ? 'месяц' : n < 5 ? 'месяца' : 'месяцев'
 
+const DEFAULT_WL_SETTINGS: WlTrafficSettings = {
+  price_per_gb: 10,
+  default_limit_gb: 15,
+  packages: [
+    { gb: 5,  price: 49  },
+    { gb: 15, price: 99  },
+    { gb: 50, price: 249 },
+  ],
+}
+
 export function PricingEditor({ onBack }: PricingEditorProps) {
   const { telegramUser } = useUser()
   const [plans, setPlans] = useState<SubscriptionPlan[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [editedPrices, setEditedPrices] = useState<Record<string, number>>({})
+  const [wlSettings, setWlSettings] = useState<WlTrafficSettings>(DEFAULT_WL_SETTINGS)
+  const [wlSaving, setWlSaving] = useState(false)
 
   const fetchPlans = async () => {
     setIsLoading(true)
@@ -48,10 +66,38 @@ export function PricingEditor({ onBack }: PricingEditorProps) {
         })
         setEditedPrices(prices)
       }
+      // Load WL settings
+      try {
+        const wr = await fetch(`/api/admin/settings?telegram_id=${telegramUser?.id || 0}`)
+        if (wr.ok) {
+          const wd = await wr.json()
+          if (wd.whitelist_traffic) setWlSettings({ ...DEFAULT_WL_SETTINGS, ...wd.whitelist_traffic })
+        }
+      } catch { /* use defaults */ }
     } catch (err) {
       console.error('Error fetching plans:', err)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleSaveWlSettings = async () => {
+    setWlSaving(true)
+    try {
+      const r = await fetch(`/api/admin/settings?telegram_id=${telegramUser?.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ whitelist_traffic: wlSettings }),
+      })
+      if (r.ok) {
+        alert('Настройки белых списков сохранены')
+      } else {
+        alert('Ошибка при сохранении')
+      }
+    } catch {
+      alert('Ошибка при сохранении')
+    } finally {
+      setWlSaving(false)
     }
   }
 
@@ -167,6 +213,68 @@ export function PricingEditor({ onBack }: PricingEditorProps) {
               })}
             </div>
           )}
+
+          {/* Whitelist traffic settings */}
+          <header style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+            <h2 style={{ fontFamily: FONT, fontSize: 20, fontWeight: 800, color: T.ink, margin: 0 }}>
+              Белые списки — трафик
+            </h2>
+            <p style={{ fontFamily: FONT, fontSize: 13, color: T.muted, margin: 0 }}>
+              Настройте цены и лимиты для режима белых списков.
+            </p>
+          </header>
+
+          <div style={card}>
+            {/* price per GB */}
+            <div style={{ padding: '16px', borderBottom: `1px solid ${T.line}`, display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center' }}>
+              <div>
+                <p style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: T.ink, margin: 0 }}>Цена за 1 ГБ</p>
+                <p style={{ ...mono, fontSize: 11, color: T.muted, margin: '3px 0 0' }}>Базовая цена при покупке без пакета</p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="number" value={wlSettings.price_per_gb} onChange={e => setWlSettings(s => ({ ...s, price_per_gb: parseInt(e.target.value) || 0 }))} min={1} step={1} style={{ ...field, width: 80, textAlign: 'right', fontFamily: 'var(--font-mono, ui-monospace), monospace', fontSize: 14, fontWeight: 600, padding: '8px 10px' }} />
+                <span style={{ ...mono, fontSize: 13, color: T.muted }}>₽/ГБ</span>
+              </div>
+            </div>
+
+            {/* default limit */}
+            <div style={{ padding: '16px', borderBottom: `1px solid ${T.line}`, display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center' }}>
+              <div>
+                <p style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: T.ink, margin: 0 }}>Лимит по умолчанию</p>
+                <p style={{ ...mono, fontSize: 11, color: T.muted, margin: '3px 0 0' }}>Бесплатный лимит в подписке (ГБ)</p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="number" value={wlSettings.default_limit_gb} onChange={e => setWlSettings(s => ({ ...s, default_limit_gb: parseInt(e.target.value) || 0 }))} min={0} step={1} style={{ ...field, width: 80, textAlign: 'right', fontFamily: 'var(--font-mono, ui-monospace), monospace', fontSize: 14, fontWeight: 600, padding: '8px 10px' }} />
+                <span style={{ ...mono, fontSize: 13, color: T.muted }}>ГБ</span>
+              </div>
+            </div>
+
+            {/* packages */}
+            {wlSettings.packages.map((pkg, i) => (
+              <div key={i} style={{ padding: '16px', borderBottom: i < wlSettings.packages.length - 1 ? `1px solid ${T.line}` : 'none', display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: T.ink, margin: 0 }}>Пакет {pkg.gb} ГБ</p>
+                  <p style={{ ...mono, fontSize: 11, color: T.muted, margin: '3px 0 0' }}>Готовый пакет на выбор</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input type="number" value={pkg.gb} onChange={e => { const val = parseInt(e.target.value) || 0; setWlSettings(s => { const p = [...s.packages]; p[i] = { ...p[i], gb: val }; return { ...s, packages: p } }) }} min={1} step={1} style={{ ...field, width: 60, textAlign: 'right', fontFamily: 'var(--font-mono, ui-monospace), monospace', fontSize: 13, padding: '6px 8px' }} />
+                  <span style={{ ...mono, fontSize: 12, color: T.muted }}>ГБ</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input type="number" value={pkg.price} onChange={e => { const val = parseInt(e.target.value) || 0; setWlSettings(s => { const p = [...s.packages]; p[i] = { ...p[i], price: val }; return { ...s, packages: p } }) }} min={1} step={1} style={{ ...field, width: 70, textAlign: 'right', fontFamily: 'var(--font-mono, ui-monospace), monospace', fontSize: 13, padding: '6px 8px' }} />
+                  <span style={{ ...mono, fontSize: 12, color: T.muted }}>₽</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={handleSaveWlSettings}
+            disabled={wlSaving}
+            style={{ ...btn('primary'), width: '100%', padding: '12px 16px', fontSize: 13, opacity: wlSaving ? 0.5 : 1 }}
+          >
+            {wlSaving ? 'Сохранение...' : 'Сохранить настройки белых списков'}
+          </button>
 
         </div>
       </div>

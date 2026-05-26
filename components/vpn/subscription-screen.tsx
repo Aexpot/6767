@@ -14,7 +14,13 @@ const payMethods = [
   { id:'yoomoney',  label:'ЮMoney',       icon:<YooMoneyIcon />, active: true },
 ]
 
-const features = ['Безлимитный трафик','До 5 устройств','Серверы 40+ стран','AES-256 шифрование','Kill Switch']
+const features = ['Безлимитный трафик','До 5 устройств','AES-256 шифрование','Kill Switch','15 ГБ трафика по белым спискам']
+
+const WHITELIST_TRAFFIC_PACKAGES = [
+  { gb: 5,  price: 49  },
+  { gb: 15, price: 99  },
+  { gb: 50, price: 249 },
+]
 
 export function SubscriptionScreen({ onNavigate }: SubscriptionScreenProps) {
   const { user, plans, telegramUser } = useUser()
@@ -30,6 +36,8 @@ export function SubscriptionScreen({ onNavigate }: SubscriptionScreenProps) {
   const [discount, setDiscount] = useState(0)
   const [extraDevices, setExtraDevices] = useState(0)
   const EXTRA_DEVICE_PRICE = 90
+  const [extraWlTrafficGb, setExtraWlTrafficGb] = useState(0)
+  const EXTRA_WL_TRAFFIC_PRICE_PER_GB = 10 // 10 ₽ за 1 ГБ
 
   useEffect(() => { const t = setTimeout(() => setMounted(true), 40); return () => clearTimeout(t) }, [])
   useEffect(() => { if (plans.length && !selectedPlan) setSelectedPlan(plans.find(p => p.is_popular)?.id || plans[0]?.id || '') }, [plans, selectedPlan])
@@ -70,6 +78,7 @@ export function SubscriptionScreen({ onNavigate }: SubscriptionScreenProps) {
         telegram_id: telegramUser.id,
         plan_id: chosen.id,
         extra_devices: extraDevices,
+        extra_whitelist_traffic_gb: extraWlTrafficGb,
       }
 
       // Add promocode if applied
@@ -198,11 +207,11 @@ export function SubscriptionScreen({ onNavigate }: SubscriptionScreenProps) {
         <div style={{ display:'flex', flexDirection:'column', gap:'8px', ...reveal(mounted,5) }}>
           <p style={{ fontFamily:BODY, fontSize:'12px', fontWeight:600, color:C.textMuted, textTransform:'uppercase', letterSpacing:'0.06em', margin:'0 0 2px' }}>Дополнительные устройства</p>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:`12px ${R.cardPadH}`, borderRadius:R.cardRadius, background:C.cardLight }}>
-            <div style={{ flex:1 }}>
+            <div style={{ flex:1, paddingRight:'8px' }}>
               <p style={{ fontFamily:BODY, fontSize:'14px', fontWeight:600, color:C.text, margin:0 }}>Доп. устройств</p>
-              <p style={{ fontFamily:BODY, fontSize:'11px', color:C.textMuted, margin:'2px 0 0' }}>+{EXTRA_DEVICE_PRICE} ₽ за каждое (1 устройство в подписке уже включено)</p>
+              <p style={{ fontFamily:BODY, fontSize:'11px', color:C.textMuted, margin:'2px 0 0', lineHeight:1.4 }}>+{EXTRA_DEVICE_PRICE} ₽ за каждое (1 устройство включено)</p>
             </div>
-            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', flexShrink:0 }}>
               <button onClick={()=>setExtraDevices(Math.max(0, extraDevices - 1))}
                 disabled={extraDevices === 0}
                 style={{ width:'32px', height:'32px', borderRadius:'10px', border:`2px solid ${C.border}`, background:C.bg, fontSize:'18px', fontWeight:700, color:C.text, cursor: extraDevices===0?'not-allowed':'pointer', opacity: extraDevices===0?0.4:1 }}>−</button>
@@ -210,6 +219,43 @@ export function SubscriptionScreen({ onNavigate }: SubscriptionScreenProps) {
               <button onClick={()=>setExtraDevices(Math.min(5, extraDevices + 1))}
                 disabled={extraDevices === 5}
                 style={{ width:'32px', height:'32px', borderRadius:'10px', border:`2px solid ${C.accent}`, background:C.accent, fontSize:'18px', fontWeight:700, color:'#fff', cursor: extraDevices===5?'not-allowed':'pointer', opacity: extraDevices===5?0.4:1 }}>+</button>
+            </div>
+          </div>
+        </div>
+
+        {/* Белые списки */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'8px', ...reveal(mounted,5) }}>
+          <p style={{ fontFamily:BODY, fontSize:'12px', fontWeight:600, color:C.textMuted, textTransform:'uppercase', letterSpacing:'0.06em', margin:'0 0 2px' }}>Белые списки</p>
+          {/* Info block */}
+          <div style={{ padding:`10px ${R.cardPadH}`, borderRadius:R.cardRadius, background:'#EEF4FF', display:'flex', flexDirection:'column', gap:'6px' }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:'8px' }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink:0, marginTop:'1px' }}>
+                <circle cx="8" cy="8" r="7" fill="#4A6EF5" fillOpacity=".15"/>
+                <path d="M8 5v3m0 2.5v.5" stroke="#4A6EF5" strokeWidth="1.6" strokeLinecap="round"/>
+              </svg>
+              <p style={{ fontFamily:BODY, fontSize:'12px', color:'#2B3D8C', margin:0, lineHeight:1.5 }}>
+                <strong>Режим белых списков</strong> — VPN работает только для сайтов из белого списка (банки, соцсети, заблокированные сервисы), остальной трафик идёт напрямую. Экономит заряд и скорость.
+              </p>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" fill="#4A6EF5" fillOpacity=".12"/><path d="M4.5 7l2 2 3-3" stroke="#4A6EF5" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <span style={{ fontFamily:BODY, fontSize:'11px', color:'#4A6EF5', fontWeight:600 }}>В стандартной подписке включено 15 ГБ трафика белых списков</span>
+            </div>
+          </div>
+          {/* Extra whitelist traffic selector */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:`12px ${R.cardPadH}`, borderRadius:R.cardRadius, background:C.cardLight }}>
+            <div style={{ flex:1, paddingRight:'8px' }}>
+              <p style={{ fontFamily:BODY, fontSize:'14px', fontWeight:600, color:C.text, margin:0 }}>Доп. трафик (белые списки)</p>
+              <p style={{ fontFamily:BODY, fontSize:'11px', color:C.textMuted, margin:'2px 0 0', lineHeight:1.4 }}>+{EXTRA_WL_TRAFFIC_PRICE_PER_GB} ₽/ГБ {extraWlTrafficGb > 0 ? `— добавить ${extraWlTrafficGb} ГБ` : ''}</p>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', flexShrink:0 }}>
+              <button onClick={()=>setExtraWlTrafficGb(Math.max(0, extraWlTrafficGb - 5))}
+                disabled={extraWlTrafficGb === 0}
+                style={{ width:'32px', height:'32px', borderRadius:'10px', border:`2px solid ${C.border}`, background:C.bg, fontSize:'18px', fontWeight:700, color:C.text, cursor: extraWlTrafficGb===0?'not-allowed':'pointer', opacity: extraWlTrafficGb===0?0.4:1 }}>−</button>
+              <span style={{ minWidth:'36px', textAlign:'center', fontFamily:DISPLAY, fontSize:'14px', fontWeight:800, color:C.text }}>{extraWlTrafficGb} ГБ</span>
+              <button onClick={()=>setExtraWlTrafficGb(Math.min(100, extraWlTrafficGb + 5))}
+                disabled={extraWlTrafficGb === 100}
+                style={{ width:'32px', height:'32px', borderRadius:'10px', border:`2px solid #4A6EF5`, background:'#4A6EF5', fontSize:'18px', fontWeight:700, color:'#fff', cursor: extraWlTrafficGb===100?'not-allowed':'pointer', opacity: extraWlTrafficGb===100?0.4:1 }}>+</button>
             </div>
           </div>
         </div>
@@ -281,7 +327,22 @@ export function SubscriptionScreen({ onNavigate }: SubscriptionScreenProps) {
         {error && <p style={{ fontFamily:BODY, fontSize:'13px', color:C.error, textAlign:'center', margin:0 }}>{error}</p>}
 
         <div style={reveal(mounted,7)}>
-          <CTAButton plan={chosen} loading={loading} onClick={handlePay} discount={discount} extraDevices={extraDevices} extraDevicePrice={EXTRA_DEVICE_PRICE} />
+          <CTAButton plan={chosen} loading={loading} onClick={handlePay} discount={discount} extraDevices={extraDevices} extraDevicePrice={EXTRA_DEVICE_PRICE} extraWlTrafficGb={extraWlTrafficGb} extraWlTrafficPricePerGb={EXTRA_WL_TRAFFIC_PRICE_PER_GB} />
+        </div>
+
+        {/* Payment logos */}
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'10px', paddingTop:'4px', paddingBottom:'8px', ...reveal(mounted,8) }}>
+          <p style={{ fontFamily:BODY, fontSize:'11px', color:C.textMuted, margin:0 }}>Принимаем оплату</p>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', flexWrap:'wrap' }}>
+            <PayLogo label="USDT" color="#26A17B" />
+            <PayLogo label="TON" color="#0088CC" />
+            <PayLogo label="BTC" color="#F7931A" />
+            <PayLogo label="ЮMoney" color="#8B3FBF" />
+            <PayLogo label="SBP" color="#1DA462" />
+          </div>
+          <p style={{ fontFamily:BODY, fontSize:'10px', color:C.textMuted, margin:0, textAlign:'center', lineHeight:1.4 }}>
+            Платежи защищены. После оплаты подписка активируется автоматически.
+          </p>
         </div>
 
         <style>{`main::-webkit-scrollbar{display:none}`}</style>
@@ -345,13 +406,22 @@ function PayMethodCard({ method, selected, onSelect }: { method: typeof payMetho
   )
 }
 
-function CTAButton({ plan, loading, onClick, discount, extraDevices, extraDevicePrice }: { plan: any; loading: boolean; onClick: () => void; discount: number; extraDevices: number; extraDevicePrice: number }) {
+function PayLogo({ label, color }: { label: string; color: string }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:'4px', padding:'4px 8px', borderRadius:'6px', border:`1.5px solid ${color}20`, background:`${color}10` }}>
+      <span style={{ fontFamily:'var(--font-body)', fontSize:'11px', fontWeight:700, color, letterSpacing:'0.01em' }}>{label}</span>
+    </div>
+  )
+}
+
+function CTAButton({ plan, loading, onClick, discount, extraDevices, extraDevicePrice, extraWlTrafficGb, extraWlTrafficPricePerGb }: { plan: any; loading: boolean; onClick: () => void; discount: number; extraDevices: number; extraDevicePrice: number; extraWlTrafficGb: number; extraWlTrafficPricePerGb: number }) {
   const [pressed, setPressed] = useState(false)
-  const basePrice = plan ? parseFloat(plan.price_rub) + extraDevices * extraDevicePrice : 0
+  const basePrice = plan ? parseFloat(plan.price_rub) + extraDevices * extraDevicePrice + extraWlTrafficGb * extraWlTrafficPricePerGb : 0
   const finalPrice = Math.max(0, basePrice - discount)
   const subtitleParts: string[] = []
   if (plan) subtitleParts.push(plan.name)
   if (extraDevices > 0) subtitleParts.push(`+${extraDevices} устр.`)
+  if (extraWlTrafficGb > 0) subtitleParts.push(`+${extraWlTrafficGb} ГБ WL`)
   if (discount > 0) subtitleParts.push(`скидка ${discount} ₽`)
   return (
     <button onClick={onClick} disabled={!plan || loading}

@@ -9,23 +9,23 @@ interface WindowsSetupScreenProps { onNavigate: (screen: Screen) => void }
 
 const steps = [
   {
-    title: "Скачайте Hiddify",
-    body: "Загрузите Hiddify для Windows с официального сайта на GitHub. Файл весит около 50 МБ, установка не требуется.",
-    action: { label: "Скачать Hiddify для Windows", url: "https://github.com/hiddify/hiddify-app/releases/latest" },
+    title: "Скачайте Happ",
+    body: "Загрузите клиент Happ для Windows с официального сайта. Файл весит около 40 МБ, установка не требуется.",
+    action: { label: "Скачать Happ для Windows", url: "https://happ.su/download" },
   },
   {
-    title: "Запустите Hiddify",
+    title: "Запустите Happ",
     body: "Откройте скачанный .exe файл. При первом запуске разрешите доступ в брандмауэре Windows.",
     action: null,
   },
   {
-    title: "Скопируйте ключ",
+    title: "Скопируйте ключ подписки",
     body: "Откройте ChampionVPN в Telegram, нажмите «Настроить подключение» → «Скопировать ключ».",
     action: null,
   },
   {
     title: "Добавьте и подключитесь",
-    body: "В Hiddify нажмите «+» → «Вставить из буфера обмена», затем нажмите «Подключить». Готово!",
+    body: "В Happ нажмите «+» → «Вставить из буфера обмена», затем нажмите «Подключить». Готово!",
     action: null,
   },
 ]
