@@ -100,6 +100,35 @@ interface NewsItem {
   updated_at: string
 }
 
+interface SupportTicket {
+  ticket_id: number
+  user_id: number
+  subject: string
+  category: string
+  priority: string
+  status: string
+  unread_admin_count: number
+  unread_user_count: number
+  last_message_at: string | null
+  created_at: string
+  telegram_id: number
+  username: string | null
+  first_name: string | null
+  last_message: string | null
+  message_count: number
+}
+
+interface SupportMessage {
+  message_id: number
+  ticket_id: number
+  author_role: string
+  body: string
+  created_at: string
+  username?: string | null
+  first_name?: string | null
+  telegram_id?: number
+}
+
 const monthsWord = (n: number) =>
   n === 1 ? 'месяц' : n < 5 ? 'месяца' : 'месяцев'
 
@@ -122,6 +151,7 @@ const TABS = [
   { id: 'analytics', label: 'Аналитика',    Icon: ChartPie  },
   { id: 'users',     label: 'Пользователи', Icon: Users     },
   { id: 'payments',  label: 'Платежи',      Icon: CreditCard },
+  { id: 'support',   label: 'Поддержка',    Icon: ChatCircle },
   { id: 'settings',  label: 'Настройки',    Icon: GearSix   },
 ] as const
 
@@ -178,6 +208,13 @@ export default function AdminPage() {
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false)
   const [adminPassword, setAdminPassword] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
+
+  const [tickets, setTickets] = useState<SupportTicket[]>([])
+  const [ticketStatusFilter, setTicketStatusFilter] = useState<'all' | 'open' | 'closed'>('all')
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null)
+  const [ticketMessages, setTicketMessages] = useState<SupportMessage[]>([])
+  const [ticketReply, setTicketReply] = useState('')
+  const [isSendingReply, setIsSendingReply] = useState(false)
 
   /* ── auth ── */
   useEffect(() => {
@@ -320,6 +357,78 @@ export default function AdminPage() {
         setNewsItems(Array.isArray(d) ? d : (d.news || []))
       }
     } catch (e) { console.error(e) } finally { setIsLoading(false) }
+  }, [telegramId])
+
+  const fetchTickets = useCallback(async (statusFilter?: string) => {
+    if (!telegramId) return
+    setIsLoading(true)
+    try {
+      const s = statusFilter || ticketStatusFilter
+      const r = await fetch(`/api/admin/support?telegram_id=${telegramId}&status=${s}`)
+      if (r.ok) {
+        const d = await r.json()
+        setTickets(d.tickets || [])
+      }
+    } catch (e) { console.error(e) } finally { setIsLoading(false) }
+  }, [telegramId, ticketStatusFilter])
+
+  const openTicket = useCallback(async (ticket: SupportTicket) => {
+    setSelectedTicket(ticket)
+    setTicketMessages([])
+    setTicketReply('')
+    if (!telegramId) return
+    try {
+      const r = await fetch(`/api/admin/support?telegram_id=${telegramId}&ticket_id=${ticket.ticket_id}`)
+      if (r.ok) {
+        const d = await r.json()
+        setTicketMessages(d.messages || [])
+        // refresh unread count in list
+        setTickets(prev => prev.map(t =>
+          t.ticket_id === ticket.ticket_id ? { ...t, unread_admin_count: 0 } : t
+        ))
+      }
+    } catch (e) { console.error(e) }
+  }, [telegramId])
+
+  const sendTicketReply = useCallback(async () => {
+    if (!selectedTicket || !ticketReply.trim() || !telegramId) return
+    setIsSendingReply(true)
+    try {
+      const r = await fetch('/api/admin/support', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegram_id: parseInt(telegramId),
+          ticket_id: selectedTicket.ticket_id,
+          action: 'reply',
+          message: ticketReply.trim(),
+        }),
+      })
+      if (r.ok) {
+        const d = await r.json()
+        setTicketMessages(prev => [...prev, d.message])
+        setTicketReply('')
+        setTickets(prev => prev.map(t =>
+          t.ticket_id === selectedTicket.ticket_id
+            ? { ...t, last_message: ticketReply.trim(), last_message_role: 'admin' }
+            : t
+        ))
+      }
+    } catch (e) { console.error(e) } finally { setIsSendingReply(false) }
+  }, [selectedTicket, ticketReply, telegramId])
+
+  const changeTicketStatus = useCallback(async (ticketId: number, action: 'close' | 'reopen') => {
+    if (!telegramId) return
+    try {
+      await fetch('/api/admin/support', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegram_id: parseInt(telegramId), ticket_id: ticketId, action }),
+      })
+      const newStatus = action === 'close' ? 'closed' : 'open'
+      setTickets(prev => prev.map(t => t.ticket_id === ticketId ? { ...t, status: newStatus } : t))
+      setSelectedTicket(prev => prev?.ticket_id === ticketId ? { ...prev, status: newStatus } : prev)
+    } catch (e) { console.error(e) }
   }, [telegramId])
 
   const checkRemnawaveStatus = useCallback(async () => {
@@ -562,6 +671,7 @@ export default function AdminPage() {
     else if (activeTab === 'payments') fetchPayments(1)
     else if (activeTab === 'faq') fetchFaq()
     else if (activeTab === 'news') fetchNews()
+    else if (activeTab === 'support') fetchTickets()
     else if (activeTab === 'settings') checkRemnawaveStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, searchQuery, telegramId])
@@ -916,6 +1026,25 @@ export default function AdminPage() {
               setShowNewsModal(true)
             }}
             onToggle={toggleNews} onDelete={deleteNews}
+          />
+        )}
+
+        {/* ───────── SUPPORT ───────── */}
+        {activeTab === 'support' && (
+          <SupportView
+            tickets={tickets}
+            loading={isLoading}
+            statusFilter={ticketStatusFilter}
+            onStatusFilter={(s) => { setTicketStatusFilter(s); fetchTickets(s) }}
+            selectedTicket={selectedTicket}
+            messages={ticketMessages}
+            onOpenTicket={openTicket}
+            onCloseTicket={setSelectedTicket.bind(null, null)}
+            reply={ticketReply}
+            onReplyChange={setTicketReply}
+            onSendReply={sendTicketReply}
+            isSending={isSendingReply}
+            onChangeStatus={changeTicketStatus}
           />
         )}
 
@@ -2140,6 +2269,205 @@ function Table({ head, children }: { head: string[]; children: React.ReactNode }
       </thead>
       <tbody>{children}</tbody>
     </table>
+  )
+}
+
+/* ─────────────────────────────────────────
+   SupportView
+───────────────────────────────────────── */
+function SupportView({
+  tickets, loading, statusFilter, onStatusFilter,
+  selectedTicket, messages, onOpenTicket, onCloseTicket,
+  reply, onReplyChange, onSendReply, isSending, onChangeStatus,
+}: {
+  tickets: SupportTicket[]
+  loading: boolean
+  statusFilter: 'all' | 'open' | 'closed'
+  onStatusFilter: (s: 'all' | 'open' | 'closed') => void
+  selectedTicket: SupportTicket | null
+  messages: SupportMessage[]
+  onOpenTicket: (t: SupportTicket) => void
+  onCloseTicket: () => void
+  reply: string
+  onReplyChange: (v: string) => void
+  onSendReply: () => void
+  isSending: boolean
+  onChangeStatus: (id: number, action: 'close' | 'reopen') => void
+}) {
+  const T_local = { open: '#22c55e', closed: '#64748b' }
+  const statusLabel = (s: string) => s === 'open' ? 'Открыт' : 'Закрыт'
+  const categoryLabel = (c: string) => ({
+    general: 'Общее', technical: 'Техническая', billing: 'Оплата', other: 'Другое',
+  }[c] ?? c)
+
+  if (selectedTicket) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: SP.lg }}>
+        {/* header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={onCloseTicket}
+            style={{ ...btn('ghost'), padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            ← Назад
+          </button>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ ...displaySm, fontSize: 18 }}>#{selectedTicket.ticket_id} {selectedTicket.subject}</span>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
+                background: selectedTicket.status === 'open' ? '#dcfce7' : '#f1f5f9',
+                color: selectedTicket.status === 'open' ? '#15803d' : '#475569',
+              }}>{statusLabel(selectedTicket.status)}</span>
+            </div>
+            <div style={{ color: T.muted, fontSize: 12, marginTop: 2 }}>
+              @{selectedTicket.username || selectedTicket.telegram_id} · {categoryLabel(selectedTicket.category)}
+            </div>
+          </div>
+          <button
+            onClick={() => onChangeStatus(selectedTicket.ticket_id, selectedTicket.status === 'open' ? 'close' : 'reopen')}
+            style={selectedTicket.status === 'open' ? btn('ghost') : btn('primary')}
+          >
+            {selectedTicket.status === 'open' ? <><Lock size={14} /> Закрыть</> : <><LockOpen size={14} /> Открыть</>}
+          </button>
+        </div>
+
+        {/* messages */}
+        <div style={{
+          background: T.canvas, border: `1px solid ${T.line}`, borderRadius: 8,
+          padding: SP.lg, display: 'flex', flexDirection: 'column', gap: 12,
+          minHeight: 300, maxHeight: '50vh', overflowY: 'auto',
+        }}>
+          {messages.length === 0 && (
+            <div style={{ color: T.muted, fontSize: 13, textAlign: 'center', padding: SP.xl }}>
+              Нет сообщений
+            </div>
+          )}
+          {messages.map(m => (
+            <div key={m.message_id} style={{
+              display: 'flex', flexDirection: 'column',
+              alignItems: m.author_role === 'admin' ? 'flex-end' : 'flex-start',
+            }}>
+              <div style={{
+                maxWidth: '75%', padding: '8px 12px', borderRadius: 12,
+                background: m.author_role === 'admin' ? '#3b82f6' : T.surface,
+                color: m.author_role === 'admin' ? '#fff' : T.ink,
+                border: m.author_role === 'admin' ? 'none' : `1px solid ${T.line}`,
+                fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap',
+              }}>
+                {m.body}
+              </div>
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+                {m.author_role === 'admin' ? 'Вы' : `@${m.username || m.telegram_id}`}
+                {' · '}{new Date(m.created_at).toLocaleString('ru')}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* reply */}
+        {selectedTicket.status === 'open' && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <textarea
+              value={reply}
+              onChange={e => onReplyChange(e.target.value)}
+              placeholder="Введите ответ..."
+              rows={3}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) onSendReply() }}
+              style={{
+                ...field, flex: 1, resize: 'vertical', fontFamily: FONT, fontSize: 14,
+                lineHeight: 1.5,
+              }}
+            />
+            <button
+              onClick={onSendReply}
+              disabled={isSending || !reply.trim()}
+              style={{ ...btn('primary'), alignSelf: 'flex-end', opacity: (!reply.trim() || isSending) ? 0.5 : 1 }}
+            >
+              Отправить
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ticket list
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: SP.lg }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h2 style={displaySm}>Тикеты поддержки</h2>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {(['all', 'open', 'closed'] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => onStatusFilter(s)}
+              style={{
+                ...btn(statusFilter === s ? 'primary' : 'ghost'),
+                padding: '5px 14px', fontSize: 13,
+              }}
+            >
+              {s === 'all' ? 'Все' : s === 'open' ? 'Открытые' : 'Закрытые'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading && <div style={{ color: T.muted, fontSize: 13 }}>Загрузка...</div>}
+      {!loading && tickets.length === 0 && (
+        <Empty icon={<ChatCircle size={28} />} label="Тикетов нет" />
+      )}
+      {!loading && tickets.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {tickets.map(t => (
+            <div
+              key={t.ticket_id}
+              onClick={() => onOpenTicket(t)}
+              style={{
+                ...card,
+                cursor: 'pointer', padding: '14px 18px',
+                display: 'flex', alignItems: 'center', gap: 14,
+                borderLeft: `3px solid ${t.status === 'open' ? T_local.open : T_local.closed}`,
+                opacity: t.status === 'closed' ? 0.7 : 1,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 600, fontSize: 14, color: T.ink }}>
+                    #{t.ticket_id} {t.subject}
+                  </span>
+                  {t.unread_admin_count > 0 && (
+                    <span style={{
+                      background: '#ef4444', color: '#fff', borderRadius: 20,
+                      fontSize: 11, fontWeight: 700, padding: '1px 7px',
+                    }}>{t.unread_admin_count}</span>
+                  )}
+                </div>
+                <div style={{ color: T.muted, fontSize: 12, marginTop: 2 }}>
+                  @{t.username || t.telegram_id} · {categoryLabel(t.category)}
+                  {t.last_message && (
+                    <span style={{ marginLeft: 8, color: T.muted }}>— {t.last_message.slice(0, 60)}{t.last_message.length > 60 ? '…' : ''}</span>
+                  )}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
+                  background: t.status === 'open' ? '#dcfce7' : '#f1f5f9',
+                  color: t.status === 'open' ? '#15803d' : '#475569',
+                  display: 'inline-block', marginBottom: 4,
+                }}>{statusLabel(t.status)}</div>
+                <div style={{ color: T.muted, fontSize: 11 }}>
+                  {t.last_message_at
+                    ? new Date(t.last_message_at).toLocaleDateString('ru')
+                    : new Date(t.created_at).toLocaleDateString('ru')}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -4,9 +4,7 @@ import { query } from '@/lib/db'
 async function isAdmin(telegramId: string | null): Promise<boolean> {
   if (!telegramId) return false
   const adminIds = process.env.ADMIN_TELEGRAM_IDS?.split(',').map(s => s.trim()) || []
-  if (adminIds.includes(telegramId)) return true
-  const res = await query(`SELECT is_admin FROM users WHERE telegram_id = $1`, [parseInt(telegramId)])
-  return res.rows[0]?.is_admin === true
+  return adminIds.includes(telegramId)
 }
 
 // GET /api/admin/support?telegram_id=xxx[&status=open|closed|all][&ticket_id=123]
@@ -23,32 +21,56 @@ export async function GET(req: NextRequest) {
   try {
     if (ticketId) {
       // Return single ticket + messages
-      const ticketRes = await query(`SELECT * FROM support_tickets WHERE id = $1`, [parseInt(ticketId)])
+      const ticketRes = await query(
+        `SELECT t.*, u.telegram_id, u.username, u.first_name, u.last_name
+         FROM support_tickets t
+         JOIN users u ON u.user_id = t.user_id
+         WHERE t.ticket_id = $1`,
+        [parseInt(ticketId)]
+      )
       if (!ticketRes.rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
       const msgsRes = await query(
-        `SELECT * FROM support_messages WHERE ticket_id = $1 ORDER BY created_at ASC`,
+        `SELECT m.*, u.username, u.first_name, u.telegram_id
+         FROM support_ticket_messages m
+         LEFT JOIN users u ON u.user_id = m.author_user_id
+         WHERE m.ticket_id = $1
+         ORDER BY m.created_at ASC`,
         [parseInt(ticketId)]
       )
+
+      // Mark messages as read by admin
+      await query(
+        `UPDATE support_ticket_messages
+         SET read_by_admin_at = NOW()
+         WHERE ticket_id = $1 AND read_by_admin_at IS NULL`,
+        [parseInt(ticketId)]
+      ).catch(() => {})
+
+      // Reset admin unread counter
+      await query(
+        `UPDATE support_tickets SET unread_admin_count = 0 WHERE ticket_id = $1`,
+        [parseInt(ticketId)]
+      ).catch(() => {})
+
       return NextResponse.json({ ticket: ticketRes.rows[0], messages: msgsRes.rows })
     }
 
     // Return ticket list
-    const where = status === 'all' ? '' : `WHERE t.status = '${status === 'open' ? 'open' : 'closed'}'`
+    const whereClause = status === 'all'
+      ? ''
+      : `WHERE t.status = '${status === 'open' ? 'open' : 'closed'}'`
+
     const result = await query(
       `SELECT t.*,
-         u.username, u.first_name, u.last_name,
-         (SELECT body       FROM support_messages WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1) AS last_message,
-         (SELECT is_admin   FROM support_messages WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1) AS last_is_admin,
-         (SELECT COUNT(*)   FROM support_messages WHERE ticket_id = t.id) AS message_count,
-         (SELECT COUNT(*)   FROM support_messages WHERE ticket_id = t.id AND is_admin = FALSE
-            AND created_at > COALESCE(
-              (SELECT MAX(created_at) FROM support_messages WHERE ticket_id = t.id AND is_admin = TRUE), '2000-01-01'
-            )) AS unread_count
+         u.telegram_id, u.username, u.first_name, u.last_name,
+         (SELECT body        FROM support_ticket_messages WHERE ticket_id = t.ticket_id ORDER BY created_at DESC LIMIT 1) AS last_message,
+         (SELECT author_role FROM support_ticket_messages WHERE ticket_id = t.ticket_id ORDER BY created_at DESC LIMIT 1) AS last_message_role_msg,
+         (SELECT COUNT(*)    FROM support_ticket_messages WHERE ticket_id = t.ticket_id) AS message_count
        FROM support_tickets t
-       LEFT JOIN users u ON u.telegram_id = t.telegram_id
-       ${where}
-       ORDER BY t.updated_at DESC
+       JOIN users u ON u.user_id = t.user_id
+       ${whereClause}
+       ORDER BY t.last_message_at DESC NULLS LAST, t.created_at DESC
        LIMIT 100`
     )
     return NextResponse.json({ tickets: result.rows })
@@ -58,7 +80,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/admin/support  — reply or close
+// POST /api/admin/support
 // body: { telegram_id, ticket_id, action: 'reply'|'close'|'reopen', message? }
 export async function POST(req: NextRequest) {
   try {
@@ -68,27 +90,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const ticketRes = await query(`SELECT * FROM support_tickets WHERE id = $1`, [ticket_id])
+    const ticketRes = await query(
+      `SELECT t.*, u.telegram_id AS user_telegram_id
+       FROM support_tickets t
+       JOIN users u ON u.user_id = t.user_id
+       WHERE t.ticket_id = $1`,
+      [ticket_id]
+    )
     if (!ticketRes.rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const ticket = ticketRes.rows[0]
 
     if (action === 'reply') {
       if (!message?.trim()) return NextResponse.json({ error: 'message required' }, { status: 400 })
 
       const msgRes = await query(
-        `INSERT INTO support_messages (ticket_id, sender_id, is_admin, body)
-         VALUES ($1, $2, TRUE, $3) RETURNING *`,
-        [ticket_id, `admin-${telegram_id}`, message.trim()]
+        `INSERT INTO support_ticket_messages (ticket_id, author_role, body, is_internal_note)
+         VALUES ($1, 'admin', $2, FALSE)
+         RETURNING *`,
+        [ticket_id, message.trim()]
       )
+
       await query(
-        `UPDATE support_tickets SET updated_at = NOW(), status = 'open' WHERE id = $1`,
+        `UPDATE support_tickets
+         SET updated_at = NOW(),
+             last_message_at = NOW(),
+             last_message_role = 'admin',
+             status = 'open',
+             unread_user_count = unread_user_count + 1
+         WHERE ticket_id = $1`,
         [ticket_id]
       )
 
-      // Notify user via Telegram bot
+      // Notify user via Telegram
       try {
-        const ticket = ticketRes.rows[0]
         const botToken = process.env.TELEGRAM_BOT_TOKEN
-        if (botToken && ticket.telegram_id) {
+        if (botToken && ticket.user_telegram_id) {
           const text =
             `💬 <b>Ответ от поддержки</b>\n` +
             `Тикет #${ticket_id}: ${ticket.subject}\n\n` +
@@ -96,7 +132,7 @@ export async function POST(req: NextRequest) {
           await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: ticket.telegram_id, text, parse_mode: 'HTML' }),
+            body: JSON.stringify({ chat_id: ticket.user_telegram_id, text, parse_mode: 'HTML' }),
           }).catch(() => {})
         }
       } catch {}
@@ -105,18 +141,22 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'close') {
-      await query(`UPDATE support_tickets SET status = 'closed', updated_at = NOW() WHERE id = $1`, [ticket_id])
+      await query(
+        `UPDATE support_tickets
+         SET status = 'closed', updated_at = NOW(), closed_at = NOW(), closed_by_admin_id = $2
+         WHERE ticket_id = $1`,
+        [ticket_id, null]
+      )
       // Notify user
       try {
-        const ticket = ticketRes.rows[0]
         const botToken = process.env.TELEGRAM_BOT_TOKEN
-        if (botToken && ticket.telegram_id) {
+        if (botToken && ticket.user_telegram_id) {
           await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              chat_id: ticket.telegram_id,
-              text: `🔒 <b>Тикет закрыт</b>\n\nВаш тикет #${ticket_id} «${ticket.subject}» был закрыт.\n\nЕсли проблема не решена, вы можете открыть новый обращение в разделе Поддержка.`,
+              chat_id: ticket.user_telegram_id,
+              text: `🔒 <b>Тикет закрыт</b>\n\nВаш тикет #${ticket_id} «${ticket.subject}» был закрыт.\n\nЕсли проблема не решена, вы можете открыть новое обращение в разделе Поддержка.`,
               parse_mode: 'HTML',
             }),
           }).catch(() => {})
@@ -126,7 +166,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'reopen') {
-      await query(`UPDATE support_tickets SET status = 'open', updated_at = NOW() WHERE id = $1`, [ticket_id])
+      await query(
+        `UPDATE support_tickets SET status = 'open', updated_at = NOW(), closed_at = NULL WHERE ticket_id = $1`,
+        [ticket_id]
+      )
       return NextResponse.json({ ok: true })
     }
 
