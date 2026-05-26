@@ -14,7 +14,7 @@ const payMethods = [
   { id:'yoomoney',  label:'ЮMoney',       icon:<YooMoneyIcon />, active: true },
 ]
 
-const features = ['Безлимитный трафик','До 5 устройств','AES-256 шифрование','Kill Switch','15 ГБ трафика по белым спискам']
+const features = ['Безлимитный трафик','До 5 устройств','AES-256 шифрование','Kill Switch','15 ГБ обхода белых списков РКН']
 
 const WHITELIST_TRAFFIC_PACKAGES = [
   { gb: 5,  price: 49  },
@@ -234,7 +234,7 @@ export function SubscriptionScreen({ onNavigate }: SubscriptionScreenProps) {
                 <path d="M8 5v3m0 2.5v.5" stroke="#4A6EF5" strokeWidth="1.6" strokeLinecap="round"/>
               </svg>
               <p style={{ fontFamily:BODY, fontSize:'12px', color:'#2B3D8C', margin:0, lineHeight:1.5 }}>
-                <strong>Режим белых списков</strong> — VPN работает только для сайтов из белого списка (банки, соцсети, заблокированные сервисы), остальной трафик идёт напрямую. Экономит заряд и скорость.
+                <strong>Обход белых списков РКН</strong> — в ряде регионов РФ операторы ограничивают мобильный интернет, оставляя только одобренные сайты. ChampionVPN обходит это ограничение через серверы с «белым» IP, которые пропускает ТСПУ.
               </p>
             </div>
             <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>

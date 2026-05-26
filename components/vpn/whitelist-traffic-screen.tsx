@@ -28,6 +28,8 @@ export function WhitelistTrafficScreen({ onNavigate }: WhitelistTrafficScreenPro
 
   useEffect(() => { const t = setTimeout(() => setMounted(true), 40); return () => clearTimeout(t) }, [])
 
+  const [wlAvailable, setWlAvailable] = useState<boolean | null>(null)
+
   const loadData = useCallback(async () => {
     if (!telegramUser?.id) return
     setLoading(true)
@@ -35,8 +37,10 @@ export function WhitelistTrafficScreen({ onNavigate }: WhitelistTrafficScreenPro
       const res = await fetch(`/api/vpn/whitelist-traffic?telegram_id=${telegramUser.id}`)
       if (res.ok) {
         const data = await res.json()
+        setWlAvailable(data.whitelist_available ?? null)
         if (data.whitelist_traffic_used !== undefined) setWlUsed(data.whitelist_traffic_used)
-        if (data.whitelist_traffic_limit !== undefined) setWlLimit(data.whitelist_traffic_limit)
+        if (data.whitelist_traffic_limit && data.whitelist_traffic_limit > 0)
+          setWlLimit(data.whitelist_traffic_limit)
       }
     } catch { /* use defaults */ }
     finally { setLoading(false) }
@@ -112,13 +116,16 @@ export function WhitelistTrafficScreen({ onNavigate }: WhitelistTrafficScreenPro
                 <path d="M12 3l7 4v5c0 5-4 8-7 9-3-1-7-4-7-9V7l7-4z" stroke="#4A6EF5" strokeWidth="1.6" strokeLinejoin="round"/>
               </svg>
             </div>
-            <p style={{ fontFamily:BODY, fontSize:'13px', fontWeight:700, color:'#2B3D8C', margin:0 }}>Режим белых списков</p>
+            <p style={{ fontFamily:BODY, fontSize:'13px', fontWeight:700, color:'#2B3D8C', margin:0 }}>Обход белых списков РКН</p>
           </div>
           <p style={{ fontFamily:BODY, fontSize:'12px', color:'#3B5099', margin:0, lineHeight:1.55 }}>
-            В режиме белых списков VPN туннелирует только трафик к заблокированным сайтам и сервисам (Instagram, YouTube, банки и т.д.), остальное идёт напрямую. Это экономит батарею и не замедляет обычный интернет.
+            В ряде регионов РФ операторы (МТС, Мегафон, Билайн) включили режим белых списков: мобильный интернет работает только для одобренных сайтов (Госуслуги, Яндекс, ВКонтакте), а Instagram, YouTube, Telegram и другие — недоступны. Обычный VPN в таком режиме тоже блокируется.
+          </p>
+          <p style={{ fontFamily:BODY, fontSize:'12px', color:'#3B5099', margin:'0', lineHeight:1.55 }}>
+            ChampionVPN использует серверы с «белым» IP (пропускаются ТСПУ), маскируя трафик под легальный HTTPS. Трафик через эти серверы расходует отдельный лимит — <strong>трафик белых списков</strong>.
           </p>
           <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
-            {['Только нужный трафик через VPN', 'Быстрее обычного интернета', 'Меньше расход батареи'].map((item, i) => (
+            {['Работает при включённых белых списках', 'Трафик маскируется под обычный HTTPS', 'Не замедляет остальной интернет'].map((item, i) => (
               <div key={i} style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" fill="#4A6EF5" fillOpacity=".15"/><path d="M3.5 6l2 2 3-3" stroke="#4A6EF5" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 <span style={{ fontFamily:BODY, fontSize:'11px', color:'#4A6EF5', fontWeight:500 }}>{item}</span>
@@ -126,6 +133,15 @@ export function WhitelistTrafficScreen({ onNavigate }: WhitelistTrafficScreenPro
             ))}
           </div>
         </div>
+
+        {/* Not available notice */}
+        {!loading && wlAvailable === false && (
+          <div style={{ padding:`12px ${R.cardPadH}`, borderRadius:R.cardRadius, background:C.warningSoft, ...reveal(mounted,3) }}>
+            <p style={{ fontFamily:BODY, fontSize:'13px', color:'#92400E', margin:0, lineHeight:1.5 }}>
+              ⚠️ Обход белых списков недоступен на вашем текущем тарифе. Для подключения обратитесь в поддержку.
+            </p>
+          </div>
+        )}
 
         {/* Current balance */}
         <div style={{ padding:`12px ${R.cardPadH}`, borderRadius:R.cardRadius, background:C.cardLight, display:'flex', flexDirection:'column', gap:'8px', ...reveal(mounted,3) }}>

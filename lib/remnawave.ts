@@ -462,13 +462,15 @@ class RemnawaveClient {
     }
   }
 
+  // Returns list of devices from GET /api/hwid/devices/{userUuid}
+  // Response shape: { response: { hwid, deviceModel, platform, osVersion, userAgent, createdAt }[] }
   async getUserDevices(telegramId: number): Promise<{ hwid: string; deviceModel: string | null; platform: string | null; osVersion: string | null; userAgent: string | null; createdAt: string | null }[]> {
     const username = `tg_${telegramId}`
     try {
       const raw = await this.getRawByUsername(username)
-      // Remnawave HWID devices endpoint
-      const data = await this.request<{ response: any[] }>(`/api/users/${raw.uuid}/hwid`, {}, {})
-      const list: any[] = Array.isArray(data) ? data : ((data as any)?.devices ?? (data as any)?.hwids ?? [])
+      // request() already unwraps json.response, so data is directly the array
+      const data = await this.request<any[]>(`/api/hwid/devices/${raw.uuid}`)
+      const list: any[] = Array.isArray(data) ? data : []
       return list.map((d: any) => ({
         hwid: d.hwid ?? d.id ?? String(d),
         deviceModel: d.deviceModel ?? d.device_model ?? null,
@@ -482,11 +484,15 @@ class RemnawaveClient {
     }
   }
 
+  // POST /api/hwid/devices/delete  { userUuid, hwid }
   async disconnectDevice(telegramId: number, hwid: string): Promise<boolean> {
     const username = `tg_${telegramId}`
     try {
       const raw = await this.getRawByUsername(username)
-      await this.request(`/api/users/${raw.uuid}/hwid/${encodeURIComponent(hwid)}`, { method: 'DELETE' })
+      await this.request(`/api/hwid/devices/delete`, {
+        method: 'POST',
+        body: JSON.stringify({ userUuid: raw.uuid, hwid }),
+      })
       return true
     } catch {
       return false
@@ -497,9 +503,9 @@ class RemnawaveClient {
     const username = `tg_${telegramId}`
     try {
       const raw = await this.getRawByUsername(username)
-      return (raw as any).hwidDeviceLimit ?? 3
+      return (raw as any).hwidDeviceLimit ?? 0
     } catch {
-      return 3
+      return 0
     }
   }
 }
