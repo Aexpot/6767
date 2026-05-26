@@ -1039,7 +1039,7 @@ export default function AdminPage() {
             selectedTicket={selectedTicket}
             messages={ticketMessages}
             onOpenTicket={openTicket}
-            onCloseTicket={setSelectedTicket.bind(null, null)}
+            onCloseTicket={() => setSelectedTicket(null)}
             reply={ticketReply}
             onReplyChange={setTicketReply}
             onSendReply={sendTicketReply}
