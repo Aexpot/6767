@@ -249,11 +249,19 @@ MANIFEST_FIELDS = [
 
 SPEC = PaymentProviderSpec(
     id="youmoney",
+    provider_key="youmoney",
+    label="ЮMoney",
+    webapp_label="ЮMoney",
+    webapp_labels={"ru": "ЮMoney", "en": "YouMoney"},
+    telegram_labels={"ru": "ЮMoney", "en": "YouMoney"},
+    pending_status="pending_youmoney",
+    enabled=lambda cfg: bool(getattr(cfg, "ENABLED", False) and getattr(cfg, "WALLET", None)),
     service_key="youmoney",
-    method_ids={"youmoney", "yoomoney"},
-    display_name="ЮMoney",
+    callback_prefix="pay_youmoney",
+    aliases=("yoomoney",),
+    requires_configured_service=False,
+    price_source="rub",
+    emoji="💛",
     config_class=YouMoneyConfig,
     manifest_fields=MANIFEST_FIELDS,
-    create_payment_fn=create_payment,
-    webhook_handler_fn=handle_webhook,
 )

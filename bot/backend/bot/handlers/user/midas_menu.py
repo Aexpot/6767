@@ -110,18 +110,26 @@ def build_midas_main_menu_text(
     return "\n".join(lines)
 
 
+def _v2raytun_import_url(config_link: str) -> str:
+    """Build V2RayTun deep-link that imports the subscription without any prompts."""
+    # V2RayTun supports both schemes; `v2raytun://import/<sub_url>` opens the
+    # app and immediately imports the subscription on iOS/Android.
+    return f"v2raytun://import/{config_link}"
+
+
 def build_midas_main_menu_kb(
     settings: Settings,
     has_active_sub: bool,
+    config_link: Optional[str] = None,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
-    # Row 1: Auto-import (only if active subscription)
-    if has_active_sub:
+    # Row 1: Auto-import — direct URL button (deep-link into V2RayTun, no popup)
+    if has_active_sub and config_link:
         builder.row(
             InlineKeyboardButton(
-                text="⚡ Авто-импорт",
-                callback_data="midas:auto_import",
+                text="⚡ Авто-импорт в V2RayTun",
+                url=_v2raytun_import_url(config_link),
             )
         )
 
@@ -210,8 +218,12 @@ async def send_midas_main_menu(
     except Exception:
         balance_kopecks = 0
 
+    config_link = None
+    if active:
+        config_link = active.get("config_link") or active.get("subscription_url")
+
     text = build_midas_main_menu_text(user_id, balance_kopecks, active)
-    markup = build_midas_main_menu_kb(settings, has_active_sub)
+    markup = build_midas_main_menu_kb(settings, has_active_sub, config_link=config_link)
 
     target_msg: Optional[types.Message] = (
         event.message if isinstance(event, types.CallbackQuery) else event
@@ -292,43 +304,6 @@ async def midas_back_to_main(
     await send_midas_main_menu(callback, settings, subscription_service, session, is_edit=True)
 
 
-@router.callback_query(F.data == "midas:auto_import")
-async def midas_auto_import(
-    callback: types.CallbackQuery,
-    settings: Settings,
-    subscription_service: SubscriptionService,
-    session: AsyncSession,
-    **kwargs,
-):
-    await callback.answer()
-    user_id = callback.from_user.id
-    try:
-        active = await subscription_service.get_active_subscription_details(session, user_id)
-    except Exception:
-        active = None
-
-    if not active:
-        await callback.answer("Нет активной подписки для авто-импорта.", show_alert=True)
-        return
-
-    config_link = active.get("config_link") or active.get("subscription_url")
-    connect_url = active.get("connect_button_url") or config_link
-
-    if not config_link:
-        await callback.answer("Ссылка подписки недоступна. Обратитесь в поддержку.", show_alert=True)
-        return
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔗 Открыть в приложении", url=connect_url)] if connect_url else [],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="midas:main_menu")],
-    ])
-    text = (
-        f"⚡ <b>Авто-импорт</b>\n\n"
-        f"Ваша ссылка подписки:\n"
-        f"<code>{config_link}</code>\n\n"
-        f"Нажмите кнопку ниже или скопируйте ссылку вручную."
-    )
-    try:
-        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    except Exception:
-        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+# Note: `midas:auto_import` callback is no longer needed — the menu now
+# generates a direct V2RayTun deep-link URL button, so pressing it opens
+# V2RayTun and imports the subscription immediately without any popup.
