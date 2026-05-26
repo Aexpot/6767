@@ -143,6 +143,12 @@ async function editMessageText(chatId: number, messageId: number, text: string, 
 }
 
 export async function POST(request: NextRequest) {
+  // DISABLED: Telegram bot logic moved to remnawave-minishop (Python aiogram bot).
+  // The bot now runs at https://tg.championvpn.fun/webhook/telegram
+  // This route is kept for backward compatibility but does nothing.
+  return NextResponse.json({ ok: true, note: 'bot moved to remnawave-minishop' })
+
+  // eslint-disable-next-line no-unreachable
   try {
     const update: TelegramUpdate = await request.json()
 

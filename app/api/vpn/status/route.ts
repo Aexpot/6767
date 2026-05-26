@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { query } from '@/lib/db'
 import { remnawave, isRemnawaveConfigured } from '@/lib/remnawave'
 
 export async function GET(request: NextRequest) {
@@ -8,45 +9,54 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'telegram_id required' }, { status: 400 })
   }
 
-  // Check if Remnawave is configured
-  if (!isRemnawaveConfigured()) {
-    // Return demo data
+  // First check bot DB for active subscription
+  const subResult = await query(
+    `SELECT s.end_date, s.panel_user_uuid FROM subscriptions s
+     WHERE s.user_id = $1 AND s.is_active = true AND s.end_date > NOW()
+     ORDER BY s.end_date DESC LIMIT 1`,
+    [parseInt(telegramId)]
+  )
+
+  const hasSubscription = subResult.rows.length > 0
+
+  if (!hasSubscription) {
     return NextResponse.json({
-      active: true,
-      expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-      usedTraffic: 1024 * 1024 * 500, // 500 MB
+      active: false,
+      expiresAt: null,
+      usedTraffic: 0,
       dataLimit: null,
-      links: [
-        'vless://demo-config-link',
-      ],
-      subscriptionUrl: `https://demo.xovpn.app/sub/tg_${telegramId}`,
+      links: [],
+      subscriptionUrl: null,
     })
   }
 
-  try {
-    const status = await remnawave.checkSubscription(parseInt(telegramId))
+  // Check Remnawave for VPN details
+  if (isRemnawaveConfigured()) {
+    try {
+      const status = await remnawave.checkSubscription(parseInt(telegramId))
 
-    if (!status) {
-      return NextResponse.json({
-        active: false,
-        expiresAt: null,
-        usedTraffic: 0,
-        dataLimit: null,
-        links: [],
-        subscriptionUrl: null,
-      })
+      if (status) {
+        return NextResponse.json({
+          active: status.active,
+          expiresAt: status.expiresAt?.toISOString() || null,
+          usedTraffic: status.usedTraffic,
+          dataLimit: status.dataLimit,
+          links: status.links,
+          subscriptionUrl: remnawave.getSubscriptionUrl(`tg_${telegramId}`),
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching VPN status from Remnawave:', error)
     }
-
-    return NextResponse.json({
-      active: status.active,
-      expiresAt: status.expiresAt?.toISOString() || null,
-      usedTraffic: status.usedTraffic,
-      dataLimit: status.dataLimit,
-      links: status.links,
-      subscriptionUrl: remnawave.getSubscriptionUrl(`tg_${telegramId}`),
-    })
-  } catch (error) {
-    console.error('Error fetching VPN status:', error)
-    return NextResponse.json({ error: 'Failed to fetch VPN status' }, { status: 500 })
   }
+
+  // Fallback: subscription exists in DB but Remnawave not available
+  return NextResponse.json({
+    active: true,
+    expiresAt: subResult.rows[0].end_date,
+    usedTraffic: 0,
+    dataLimit: null,
+    links: [],
+    subscriptionUrl: null,
+  })
 }

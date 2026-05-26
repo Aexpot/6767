@@ -44,9 +44,35 @@ def _text_progress_bar(used: float, total: float, width: int = 12) -> str:
 @router.callback_query(F.data == "main_action:subscription_management")
 async def subscription_management_menu(
     callback: types.CallbackQuery,
+    subscription_service: SubscriptionService,
+    session: AsyncSession,
     **kwargs,
 ):
     await callback.answer()
+    user_id = callback.from_user.id
+
+    try:
+        has_sub = await subscription_service.has_active_subscription(session, user_id)
+    except Exception:
+        has_sub = False
+
+    if not has_sub:
+        no_sub_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Купить подписку", callback_data="main_action:bot_subscribe")],
+            [InlineKeyboardButton(text="🔙 Назад",           callback_data="main_action:bot_interface")],
+        ])
+        try:
+            await callback.message.edit_text(
+                "🔧 <b>Управление подпиской</b>\n\nУ вас нет активной подписки.\nКупите подписку, чтобы получить доступ к управлению.",
+                reply_markup=no_sub_kb, parse_mode="HTML"
+            )
+        except Exception:
+            await callback.message.answer(
+                "🔧 <b>Управление подпиской</b>\n\nУ вас нет активной подписки.",
+                reply_markup=no_sub_kb, parse_mode="HTML"
+            )
+        return
+
     text = "🔧 <b>Управление подпиской</b>\n\nВыберите раздел:"
     try:
         await callback.message.edit_text(text, reply_markup=_sub_mgmt_menu_kb(), parse_mode="HTML")

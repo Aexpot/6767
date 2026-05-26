@@ -1,176 +1,144 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateReferralCode } from '@/lib/telegram'
 import { query } from '@/lib/db'
-import { checkChannelSubscription, updateUserChannelStatus } from '@/lib/channel-check'
 
+const ADMIN_IDS = process.env.ADMIN_TELEGRAM_IDS?.split(',').map(id => parseInt(id.trim())) || []
 const TELEGRAM_CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID
 
-function createFallbackUser(data: {
-  telegram_id: number
-  username?: string
-  first_name?: string
-  last_name?: string
-  photo_url?: string
-  language_code?: string
-}) {
+// Bot DB schema: users.user_id = telegram_id (bigint PK)
+// subscriptions: user_id FK -> users.user_id, is_active, end_date
+
+function formatUser(row: any, subscription: any = null, referralCount: number = 0) {
   return {
-    id: `demo-${data.telegram_id}`,
-    telegram_id: data.telegram_id,
-    username: data.username || null,
-    first_name: data.first_name || 'User',
-    last_name: data.last_name || null,
-    photo_url: data.photo_url || null,
-    language_code: data.language_code || 'ru',
-    is_admin: false,
+    id: String(row.user_id),
+    telegram_id: row.telegram_id || row.user_id,
+    username: row.username || null,
+    first_name: row.first_name || 'User',
+    last_name: row.last_name || null,
+    photo_url: row.telegram_photo_url || null,
+    language_code: row.language_code || 'ru',
+    is_admin: ADMIN_IDS.includes(Number(row.telegram_id || row.user_id)),
+    is_banned: row.is_banned || false,
+    referral_code: row.referral_code || null,
+    referred_by: row.referred_by_id ? String(row.referred_by_id) : null,
+    created_at: row.registration_date || new Date().toISOString(),
+    channel_subscribed: row.channel_subscription_verified || false,
+    channel_required: false,
+    subscription: subscription,
+    subscriptions: subscription ? [subscription] : [],
+    referral_stats: { invited_count: referralCount, bonus_days: 0 }
+  }
+}
+
+function createFallbackUser(telegram_id: number) {
+  return {
+    id: `new-${telegram_id}`,
+    telegram_id,
+    username: null,
+    first_name: 'User',
+    last_name: null,
+    photo_url: null,
+    language_code: 'ru',
+    is_admin: ADMIN_IDS.includes(telegram_id),
     is_banned: false,
-    referral_code: `ref${data.telegram_id}`,
+    referral_code: null,
     referred_by: null,
     created_at: new Date().toISOString(),
+    channel_subscribed: false,
+    channel_required: false,
     subscription: null,
+    subscriptions: [],
     referral_stats: { invited_count: 0, bonus_days: 0 }
   }
+}
+
+async function getActiveSubscription(userId: number) {
+  const result = await query(
+    `SELECT s.*, s.end_date as expires_at, s.duration_months,
+            s.tariff_key, s.panel_user_uuid
+     FROM subscriptions s
+     WHERE s.user_id = $1 AND s.is_active = true AND s.end_date > NOW()
+     ORDER BY s.end_date DESC
+     LIMIT 1`,
+    [userId]
+  )
+
+  if (result.rows.length === 0) return null
+
+  const sub = result.rows[0]
+  return {
+    id: String(sub.subscription_id),
+    user_id: String(sub.user_id),
+    status: 'active',
+    started_at: sub.start_date,
+    expires_at: sub.end_date,
+    config_url: null,
+    vpn_username: sub.panel_user_uuid,
+    auto_renew: sub.auto_renew_enabled || false,
+    subscription_plans: {
+      name: sub.tariff_key || `${sub.duration_months || 1} мес`,
+      duration_months: sub.duration_months || 1,
+      price_rub: 0
+    }
+  }
+}
+
+async function getReferralCount(userId: number) {
+  const result = await query(
+    `SELECT COUNT(*) as cnt FROM users WHERE referred_by_id = $1`,
+    [userId]
+  )
+  return parseInt(result.rows[0]?.cnt || '0')
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { telegram_id, username, first_name, last_name, photo_url, language_code, referral_code } = body
+    const { telegram_id, username, first_name, last_name, photo_url, language_code } = body
 
     if (!telegram_id) {
       return NextResponse.json({ error: 'telegram_id is required' }, { status: 400 })
     }
 
-    // Check if user exists
-    const existingUserResult = await query(
-      `SELECT u.* FROM users u WHERE u.telegram_id = $1`,
+    // In bot's DB, user_id = telegram_id
+    const userResult = await query(
+      `SELECT * FROM users WHERE user_id = $1`,
       [telegram_id]
     )
 
-    if (existingUserResult.rows.length > 0) {
-      // Check channel subscription
-      const isSubscribed = await checkChannelSubscription(telegram_id)
-      await updateUserChannelStatus(telegram_id.toString(), isSubscribed)
-
-      if (!isSubscribed && TELEGRAM_CHANNEL_ID) {
-        return NextResponse.json({
-          ...existingUserResult.rows[0],
-          channel_required: true,
-          channel_subscribed: false,
-          channel_id: TELEGRAM_CHANNEL_ID,
-          subscriptions: [],
-          subscription: null
-        })
-      }
+    if (userResult.rows.length > 0) {
+      const user = userResult.rows[0]
 
       // Update user info
-      const updateResult = await query(
-        `UPDATE users
-         SET username = $1, first_name = $2, last_name = $3,
-             photo_url = $4, language_code = $5, updated_at = NOW()
-         WHERE telegram_id = $6
-         RETURNING *`,
-        [username, first_name, last_name, photo_url, language_code, telegram_id]
-      )
-
-      const updatedUser = updateResult.rows[0]
-
-      const subsResult = await query(
-        `SELECT s.*,
-          json_build_object(
-            'name', sp.name,
-            'duration_months', sp.duration_months,
-            'price_rub', sp.price_rub
-          ) as subscription_plans
-        FROM subscriptions s
-        JOIN subscription_plans sp ON s.plan_id = sp.id
-        WHERE s.user_id = $1`,
-        [updatedUser.id]
-      )
-
-      const referralResult = await query(
-        `SELECT COUNT(*) as invited_count FROM referrals WHERE referrer_id = $1`,
-        [updatedUser.id]
-      )
-
-      const activeSubscription = subsResult.rows.find(
-        (s: any) => s.status === 'active'
-      )
-
-      return NextResponse.json({
-        ...updatedUser,
-        subscriptions: subsResult.rows,
-        subscription: activeSubscription || null,
-        referral_stats: { invited_count: parseInt(referralResult.rows[0]?.invited_count || '0'), bonus_days: 0 }
-      })
-    }
-
-    // Create new user
-    let referredById = null
-    if (referral_code) {
-      const referrerResult = await query(
-        'SELECT id FROM users WHERE referral_code = $1',
-        [referral_code]
-      )
-      if (referrerResult.rows.length > 0) {
-        referredById = referrerResult.rows[0].id
-      }
-    }
-
-    const newReferralCode = generateReferralCode(telegram_id)
-
-    const newUserResult = await query(
-      `INSERT INTO users (telegram_id, username, first_name, last_name, photo_url, language_code, referral_code, referred_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [telegram_id, username, first_name, last_name, photo_url, language_code || 'ru', newReferralCode, referredById]
-    )
-
-    const newUser = newUserResult.rows[0]
-
-    const isSubscribed = await checkChannelSubscription(telegram_id)
-    await updateUserChannelStatus(telegram_id.toString(), isSubscribed)
-
-    if (!isSubscribed && TELEGRAM_CHANNEL_ID) {
-      return NextResponse.json({
-        ...newUser,
-        channel_required: true,
-        channel_subscribed: false,
-        channel_id: TELEGRAM_CHANNEL_ID,
-        subscriptions: [],
-        subscription: null,
-        referral_stats: { invited_count: 0, bonus_days: 0 }
-      })
-    }
-
-    // Create referral record if referred
-    if (referredById) {
       await query(
-        `INSERT INTO referrals (referrer_id, referred_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-        [referredById, newUser.id]
+        `UPDATE users SET username = $1, first_name = $2, last_name = $3, telegram_photo_url = $4, language_code = $5
+         WHERE user_id = $6`,
+        [username || user.username, first_name || user.first_name, last_name || user.last_name, photo_url || user.telegram_photo_url, language_code || user.language_code, telegram_id]
       )
 
-      try {
-        const referrer = await query('SELECT telegram_id, first_name FROM users WHERE id = $1', [referredById])
-        if (referrer.rows.length > 0 && process.env.TELEGRAM_BOT_TOKEN) {
-          await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: referrer.rows[0].telegram_id,
-              text: `🎉 <b>У вас новый реферал!</b>\n\n👤 ${[first_name, last_name].filter(Boolean).join(' ') || 'Пользователь'}\n🔖 ${username ? `@${username}` : `#${telegram_id}`}`,
-              parse_mode: 'HTML'
-            })
-          }).catch(() => {})
-        }
-      } catch {}
+      const subscription = await getActiveSubscription(telegram_id)
+      const referralCount = await getReferralCount(telegram_id)
+
+      return NextResponse.json(formatUser(user, subscription, referralCount))
     }
 
-    return NextResponse.json({
-      ...newUser,
-      subscriptions: [],
-      subscription: null,
-      referral_stats: { invited_count: 0, bonus_days: 0 }
-    })
+    // User not found in bot's DB — create one
+    try {
+      await query(
+        `INSERT INTO users (user_id, telegram_id, username, first_name, last_name, telegram_photo_url, language_code, registration_date)
+         VALUES ($1, $1, $2, $3, $4, $5, $6, NOW())
+         ON CONFLICT (user_id) DO NOTHING`,
+        [telegram_id, username, first_name, last_name, photo_url, language_code || 'ru']
+      )
+
+      const newUserResult = await query(`SELECT * FROM users WHERE user_id = $1`, [telegram_id])
+      if (newUserResult.rows.length > 0) {
+        return NextResponse.json(formatUser(newUserResult.rows[0], null, 0))
+      }
+    } catch (err) {
+      console.error('Error creating user in bot DB:', err)
+    }
+
+    return NextResponse.json(createFallbackUser(telegram_id))
   } catch (error) {
     console.error('API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -186,59 +154,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'telegram_id is required' }, { status: 400 })
     }
 
+    const tid = parseInt(telegram_id)
+
     const userResult = await query(
-      `SELECT u.* FROM users u WHERE u.telegram_id = $1`,
-      [parseInt(telegram_id)]
+      `SELECT * FROM users WHERE user_id = $1`,
+      [tid]
     )
 
     if (userResult.rows.length === 0) {
-      return NextResponse.json(createFallbackUser({ telegram_id: parseInt(telegram_id) }))
+      return NextResponse.json(createFallbackUser(tid))
     }
 
     const user = userResult.rows[0]
+    const subscription = await getActiveSubscription(tid)
+    const referralCount = await getReferralCount(tid)
 
-    const isSubscribed = await checkChannelSubscription(parseInt(telegram_id))
-    await updateUserChannelStatus(telegram_id, isSubscribed)
-
-    if (!isSubscribed && TELEGRAM_CHANNEL_ID) {
-      return NextResponse.json({
-        ...user,
-        channel_required: true,
-        channel_subscribed: false,
-        channel_id: TELEGRAM_CHANNEL_ID,
-        subscriptions: [],
-        subscription: null
-      })
-    }
-
-    const subsResult = await query(
-      `SELECT s.*,
-        json_build_object(
-          'name', sp.name,
-          'duration_months', sp.duration_months,
-          'price_rub', sp.price_rub
-        ) as subscription_plans
-      FROM subscriptions s
-      JOIN subscription_plans sp ON s.plan_id = sp.id
-      WHERE s.user_id = $1`,
-      [user.id]
-    )
-
-    const referralResult = await query(
-      `SELECT COUNT(*) as invited_count FROM referrals WHERE referrer_id = $1`,
-      [user.id]
-    )
-
-    const activeSubscription = subsResult.rows.find(
-      (s: any) => s.status === 'active'
-    )
-
-    return NextResponse.json({
-      ...user,
-      subscriptions: subsResult.rows,
-      subscription: activeSubscription || null,
-      referral_stats: { invited_count: parseInt(referralResult.rows[0]?.invited_count || '0'), bonus_days: 0 }
-    })
+    return NextResponse.json(formatUser(user, subscription, referralCount))
   } catch (error) {
     console.error('API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

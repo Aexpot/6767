@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { remnawave } from '@/lib/remnawave'
 
 // "Белые списки" = обход режима белых списков РКН (ограничения мобильного интернета).
 // В Remnawave реализовано через "premium" серверы (нода с "белым" IP, которую пропускает ТСПУ).
@@ -50,7 +49,12 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // 2. Query Remnawave panel for premium (bypass) traffic data
+    // 2. Read premium (whitelist bypass) traffic data from bot DB
+    // premium_baseline_bytes    — monthly allowance from tariff config (0 = not configured)
+    // premium_topup_balance_bytes — purchased extra bytes still available
+    // premium_bonus_bytes       — admin-granted bonus bytes
+    // premium_used_bytes        — bytes consumed via premium servers this period
+    // premium_unlimited_override — no limit flag
     let wlUsed = 0
     let wlLimit = 0
     let wlBaseline = 0
@@ -58,21 +62,12 @@ export async function GET(request: NextRequest) {
     let whitelistAvailable = false
 
     try {
-      const username = `tg_${tid}`
-      // getRawUser is internal — use checkSubscription as lightweight way to find user
-      // then fetch premium fields from the panel raw user data
-      const panelUsername = username
-      const rawUser = await (remnawave as any).getRawByUsername(panelUsername)
-      // Raw Remnawave user doesn't contain premium traffic directly —
-      // that's calculated by the bot's subscription_service from local DB + tariff config.
-      // The MiniApp doesn't have tariff config, so we read the bot DB directly via pg.
-      // The bot stores premium_used_bytes and premium_topup_balance_bytes in subscriptions table.
       const premiumResult = await query(
         `SELECT
-           COALESCE(s.premium_used_bytes, 0)           AS premium_used_bytes,
-           COALESCE(s.premium_topup_balance_bytes, 0)  AS premium_topup_balance_bytes,
-           COALESCE(s.tier_baseline_bytes, 0)          AS tier_baseline_bytes,
-           COALESCE(s.premium_bonus_bytes, 0)          AS premium_bonus_bytes,
+           COALESCE(s.premium_used_bytes, 0)            AS premium_used_bytes,
+           COALESCE(s.premium_topup_balance_bytes, 0)   AS premium_topup_balance_bytes,
+           COALESCE(s.premium_baseline_bytes, 0)        AS premium_baseline_bytes,
+           COALESCE(s.premium_bonus_bytes, 0)           AS premium_bonus_bytes,
            COALESCE(s.premium_unlimited_override, false) AS premium_unlimited_override
          FROM subscriptions s
          WHERE s.user_id = $1 AND s.is_active = true AND s.end_date > NOW()
@@ -84,7 +79,7 @@ export async function GET(request: NextRequest) {
         const row = premiumResult.rows[0]
         wlUsed         = Number(row.premium_used_bytes)          || 0
         wlTopupBalance = Number(row.premium_topup_balance_bytes) || 0
-        wlBaseline     = Number(row.tier_baseline_bytes)         || 0
+        wlBaseline     = Number(row.premium_baseline_bytes)      || 0
         const bonusBytes = Number(row.premium_bonus_bytes)       || 0
         const unlimited  = Boolean(row.premium_unlimited_override)
 
@@ -98,7 +93,6 @@ export async function GET(request: NextRequest) {
       }
     } catch (panelErr) {
       console.error('[whitelist-traffic] Error fetching premium data:', panelErr)
-      // Fallback: subscription is active but we can't determine premium traffic
     }
 
     return NextResponse.json({

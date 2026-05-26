@@ -11,17 +11,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'telegram_id is required' }, { status: 400 })
     }
 
-    // Check if user has active subscription (including trial)
+    // Bot DB: check subscription
     const subResult = await query(
-      `SELECT s.*, sp.name, sp.duration_months
+      `SELECT s.subscription_id, s.end_date, s.duration_months, s.tariff_key, s.panel_user_uuid
        FROM subscriptions s
-       JOIN subscription_plans sp ON s.plan_id = sp.id
-       WHERE s.user_id = (SELECT id FROM users WHERE telegram_id = $1)
-       AND s.status = 'active'
-       AND s.expires_at > NOW()
-       ORDER BY s.expires_at DESC
+       WHERE s.user_id = $1
+       AND s.is_active = true
+       AND s.end_date > NOW()
+       ORDER BY s.end_date DESC
        LIMIT 1`,
-      [telegram_id]
+      [parseInt(telegram_id)]
     )
 
     if (subResult.rows.length === 0) {
@@ -47,8 +46,8 @@ export async function GET(request: NextRequest) {
             usedTraffic: vpnData.usedTraffic,
             dataLimit: vpnData.dataLimit,
             subscription: {
-              name: subscription.name,
-              expires_at: subscription.expires_at
+              name: subscription.tariff_key || `${subscription.duration_months || 1} мес`,
+              expires_at: subscription.end_date
             }
           })
         }
@@ -58,7 +57,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Fallback if Remnawave is not available
-    // Try to get subscription URL anyway
     let subscriptionUrl = ''
     try {
       subscriptionUrl = await remnawave.getSubscriptionUrlWithToken(parseInt(telegram_id))
@@ -76,8 +74,8 @@ export async function GET(request: NextRequest) {
       },
       message: subscriptionUrl ? '' : 'VPN настраивается, попробуйте через несколько минут',
       subscription: {
-        name: subscription.name,
-        expires_at: subscription.expires_at
+        name: subscription.tariff_key || `${subscription.duration_months || 1} мес`,
+        expires_at: subscription.end_date
       }
     })
   } catch (error) {

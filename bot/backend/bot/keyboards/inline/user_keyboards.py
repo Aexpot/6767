@@ -123,7 +123,8 @@ def get_main_menu_inline_keyboard(
 
 
 def get_bot_interface_inline_keyboard(
-    lang: str, i18n_instance, settings: Settings, show_trial_button: bool = False
+    lang: str, i18n_instance, settings: Settings, show_trial_button: bool = False,
+    has_active_subscription: bool = False
 ) -> InlineKeyboardMarkup:
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
@@ -155,12 +156,13 @@ def get_bot_interface_inline_keyboard(
         )
     )
 
-    builder.row(
-        InlineKeyboardButton(
-            text="🔧 Управление подпиской",
-            callback_data="main_action:subscription_management",
+    if has_active_subscription:
+        builder.row(
+            InlineKeyboardButton(
+                text="🔧 Управление подпиской",
+                callback_data="main_action:subscription_management",
+            )
         )
-    )
 
     referral_button = InlineKeyboardButton(
         text=_(key="menu_referral_inline"), callback_data="main_action:bot_referral"

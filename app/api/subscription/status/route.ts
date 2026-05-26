@@ -10,23 +10,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'telegram_id is required' }, { status: 400 })
     }
 
-    // Get user's active subscription
+    // Bot DB: user_id = telegram_id, subscriptions.is_active + end_date
     const result = await query(
-      `SELECT s.*, sp.name, sp.duration_months, sp.price_rub
+      `SELECT s.subscription_id, s.user_id, s.start_date, s.end_date,
+              s.duration_months, s.is_active, s.tariff_key, s.panel_user_uuid,
+              s.auto_renew_enabled
        FROM subscriptions s
-       JOIN subscription_plans sp ON s.plan_id = sp.id
-       WHERE s.user_id = (SELECT id FROM users WHERE telegram_id = $1)
-       AND s.status = 'active'
-       AND s.expires_at > NOW()
-       ORDER BY s.expires_at DESC
+       WHERE s.user_id = $1
+       AND s.is_active = true
+       AND s.end_date > NOW()
+       ORDER BY s.end_date DESC
        LIMIT 1`,
-      [telegram_id]
+      [parseInt(telegram_id)]
     )
 
     if (result.rows.length > 0) {
+      const sub = result.rows[0]
       return NextResponse.json({
         hasActiveSubscription: true,
-        subscription: result.rows[0]
+        subscription: {
+          id: String(sub.subscription_id),
+          user_id: String(sub.user_id),
+          status: 'active',
+          started_at: sub.start_date,
+          expires_at: sub.end_date,
+          name: sub.tariff_key || `${sub.duration_months || 1} мес`,
+          duration_months: sub.duration_months || 1,
+          price_rub: 0,
+          auto_renew: sub.auto_renew_enabled || false
+        }
       })
     }
 
