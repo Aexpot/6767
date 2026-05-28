@@ -282,6 +282,29 @@ class RemnawaveClient:
                     return await _extend(raw)
                 raise
 
+    async def extend_days(self, telegram_id: int, days: int) -> RemnawaveUser:
+        """Extend (or set if no user) VPN subscription by exact number of days."""
+        username = f"tg_{telegram_id}"
+        now = int(datetime.now(tz=timezone.utc).timestamp())
+        add_sec = days * 24 * 3600
+        try:
+            raw = await self._get_raw_by_username(username)
+            exp_str = raw.get("expireAt")
+            try:
+                cur = int(datetime.fromisoformat(exp_str.replace("Z", "+00:00")).timestamp()) if exp_str else now
+            except Exception:
+                cur = now
+            base = cur if cur > now else now
+            return await self._update_raw_user(raw, {"expire": base + add_sec, "status": "active"})
+        except Exception:
+            return await self.create_user(
+                username=username,
+                expire=now + add_sec,
+                status="active",
+                note=f"Telegram ID: {telegram_id}",
+                telegram_id=telegram_id,
+            )
+
     async def check_subscription(self, telegram_id: int) -> Optional[Dict[str, Any]]:
         username = f"tg_{telegram_id}"
         try:
@@ -305,6 +328,8 @@ class RemnawaveClient:
                 "subscription_url": raw.get("subscriptionUrl", ""),
                 "status": (raw.get("status") or "").lower(),
                 "username": username,
+                "uuid": raw.get("uuid", ""),
+                "short_uuid": raw.get("shortUuid", ""),
             }
         except Exception:
             return None

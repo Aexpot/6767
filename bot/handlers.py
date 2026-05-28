@@ -150,7 +150,7 @@ async def start(message: Message) -> None:
         sub = None
 
     # Sync user to webapp DB so mini-app can see them
-    panel_uuid = sub.get("username", "") if sub else ""  # tg_<id> username, not UUID yet
+    panel_uuid = (sub or {}).get("uuid", "")  # real Remnawave UUID
     try:
         await db.webapp_sync_user(
             user_id, username, first_name, last_name,
@@ -463,7 +463,14 @@ async def check_payment(callback: CallbackQuery, state: FSMContext) -> None:
             paid = True
 
     if not paid:
-        await callback.answer("⏳ Оплата ещё не поступила. Попробуйте через минуту.", show_alert=True)
+        if payment["payment_provider"] == "yoomoney":
+            await callback.answer(
+                "⏳ ЮMoney подтверждается автоматически в течение 1-2 минут после оплаты. "
+                "Если уже оплатили — подождите немного.",
+                show_alert=True,
+            )
+        else:
+            await callback.answer("⏳ Оплата ещё не поступила. Попробуйте через минуту.", show_alert=True)
         return
 
     # Activate VPN in Remnawave
@@ -813,8 +820,8 @@ async def admin_stats(callback: CallbackQuery) -> None:
     from bot import db, remnawave as rw_module
     await callback.answer("⏳ Загружаю...")
     total_users = await db.count_users()
-    total_paid = await db.count_payments("paid")
-    total_revenue = await db.sum_payments("paid")
+    total_paid = await db.count_payments("completed")
+    total_revenue = await db.sum_payments("completed")
 
     try:
         rw = rw_module.get_remnawave()
@@ -913,11 +920,13 @@ async def admin_add_days_count(message: Message, state: FSMContext) -> None:
     await state.clear()
     try:
         days = int((message.text or "").strip())
+        if days <= 0:
+            await message.answer("❌ Количество дней должно быть положительным.")
+            return
         target_id = data["target_id"]
         rw = rw_module.get_remnawave()
-        months = max(1, round(days / 30))
-        await rw.create_vpn_user(target_id, months)
-        await message.answer(f"✅ Пользователю {target_id} добавлено {days} дней.")
+        await rw.extend_days(target_id, days)
+        await message.answer(f"✅ Пользователю {target_id} добавлено {days} дн.")
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
 
@@ -933,21 +942,26 @@ async def admin_broadcast_prompt(callback: CallbackQuery, state: FSMContext) -> 
 
 @router.message(AdminState.broadcast)
 async def admin_broadcast_do(message: Message, state: FSMContext) -> None:
+    import asyncio
     from bot import db
     await state.clear()
     text = message.text or ""
-    users = await db.get_all_users(limit=10000)
     bot = message.bot
     sent = 0
-    for user in users:
+    total = 0
+    async for user in db.iter_users(batch_size=500):
+        total += 1
         if user.get("is_banned"):
             continue
         try:
             await bot.send_message(user["telegram_id"], text)
             sent += 1
+            # rate-limit: ~25 msg/sec to avoid Telegram flood
+            if sent % 25 == 0:
+                await asyncio.sleep(1)
         except Exception:
             pass
-    await message.answer(f"✅ Рассылка завершена. Отправлено: {sent}/{len(users)}")
+    await message.answer(f"✅ Рассылка завершена. Отправлено: {sent}/{total}")
 
 
 @router.callback_query(F.data == "admin_promo")
@@ -999,13 +1013,7 @@ async def admin_find_user_do(message: Message, state: FSMContext) -> None:
     await state.clear()
     query = (message.text or "").strip().lstrip("@")
 
-    users = await db.get_all_users(limit=10000)
-    found = None
-    for u in users:
-        if str(u["telegram_id"]) == query or (u.get("username") or "").lower() == query.lower():
-            found = u
-            break
-
+    found = await db.find_user(query)
     if not found:
         await message.answer("❌ Пользователь не найден в базе.")
         return

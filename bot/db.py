@@ -171,7 +171,7 @@ async def webapp_sync_subscription(
 # ── users ──────────────────────────────────────────────────────────────────────
 
 async def ensure_user(telegram_id: int, username: str = "", first_name: str = "", last_name: str = "") -> Dict[str, Any]:
-    """Get or create user. Returns webapp users-row as dict."""
+    """Get or create user. Only updates non-empty profile fields, never overwrites with empty strings."""
     async with get_pool().acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM users WHERE telegram_id = $1", telegram_id)
         if row is None:
@@ -183,9 +183,18 @@ async def ensure_user(telegram_id: int, username: str = "", first_name: str = ""
                    RETURNING *""",
                 telegram_id, username, first_name, last_name, referral_code,
             )
-        else:
-            await conn.execute(
-                "UPDATE users SET username=$2, first_name=$3, last_name=$4, updated_at=NOW() WHERE telegram_id=$1",
+            return dict(row)
+
+        # Update only non-empty fields, return refreshed row
+        if username or first_name or last_name:
+            row = await conn.fetchrow(
+                """UPDATE users SET
+                       username   = COALESCE(NULLIF($2,''), username),
+                       first_name = COALESCE(NULLIF($3,''), first_name),
+                       last_name  = COALESCE(NULLIF($4,''), last_name),
+                       updated_at = NOW()
+                   WHERE telegram_id=$1
+                   RETURNING *""",
                 telegram_id, username, first_name, last_name,
             )
         return dict(row)
@@ -209,6 +218,37 @@ async def get_all_users(limit: int = 200, offset: int = 0) -> List[Dict[str, Any
             "SELECT * FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset
         )
         return [dict(r) for r in rows]
+
+
+async def find_user(query: str) -> Optional[Dict[str, Any]]:
+    """Find user by telegram_id (numeric) or username (case-insensitive)."""
+    async with get_pool().acquire() as conn:
+        # Try numeric telegram_id first
+        try:
+            tid = int(query)
+            row = await conn.fetchrow("SELECT * FROM users WHERE telegram_id=$1", tid)
+            if row:
+                return dict(row)
+        except ValueError:
+            pass
+        row = await conn.fetchrow("SELECT * FROM users WHERE LOWER(username)=LOWER($1) LIMIT 1", query)
+        return dict(row) if row else None
+
+
+async def iter_users(batch_size: int = 500):
+    """Yield users in batches (for broadcasting). Async generator."""
+    async with get_pool().acquire() as conn:
+        offset = 0
+        while True:
+            rows = await conn.fetch(
+                "SELECT telegram_id, is_banned FROM users ORDER BY created_at LIMIT $1 OFFSET $2",
+                batch_size, offset,
+            )
+            if not rows:
+                break
+            for r in rows:
+                yield dict(r)
+            offset += batch_size
 
 
 async def count_users() -> int:
@@ -413,7 +453,7 @@ async def create_promo(code: str, discount_type: str, discount_value: float, max
         )
 
 
-async def use_promo(telegram_id: int, code: str) -> Optional[Dict[str, Any]]:
+async def use_promo(telegram_id: int, code: str, discount_amount: float = 0) -> Optional[Dict[str, Any]]:
     code = code.upper()
     async with get_pool().acquire() as conn:
         promo = await conn.fetchrow(
@@ -439,9 +479,9 @@ async def use_promo(telegram_id: int, code: str) -> Optional[Dict[str, Any]]:
             "UPDATE promocodes SET current_uses=current_uses+1 WHERE id=$1", promo["id"]
         )
         await conn.execute(
-            """INSERT INTO promocode_uses (promocode_id, user_id) VALUES ($1, $2)
-               ON CONFLICT DO NOTHING""",
-            promo["id"], user["id"],
+            """INSERT INTO promocode_uses (promocode_id, user_id, discount_amount)
+               VALUES ($1, $2, $3)""",
+            promo["id"], user["id"], discount_amount,
         )
         return dict(promo)
 
