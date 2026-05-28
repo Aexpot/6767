@@ -1,7 +1,29 @@
-import { query } from '@/lib/db'
+import { query, botQuery, getBotDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { remnawave, isRemnawaveConfigured } from '@/lib/remnawave'
 import crypto from 'crypto'
+
+// ── helper: отправить сообщение через бот-API ─────────────────────────────────
+async function sendBotMessage(telegramId: number, text: string): Promise<void> {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  if (!token) return
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: telegramId, text, parse_mode: 'HTML' }),
+    })
+  } catch (e) {
+    console.error('[sendBotMessage] error:', e)
+  }
+}
+
+// ── helper: склонение месяцев ─────────────────────────────────────────────────
+function fmtMonths(n: number): string {
+  if (n % 10 === 1 && n % 100 !== 11) return `${n} месяц`
+  if ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) return `${n} месяца`
+  return `${n} месяцев`
+}
 
 function getYooMoneySecrets(): string[] {
   return [
@@ -184,7 +206,74 @@ export async function POST(request: NextRequest) {
       )
 
       if (paymentResult.rows.length === 0) {
-        console.error('[YooMoney Webhook] Payment not found:', paymentId)
+        // Не нашли в мини-апа БД — проверяем бот-БД
+        console.log('[YooMoney Webhook] Not in webapp DB, checking bot DB:', paymentId)
+        try {
+          const botDb = getBotDb()
+          if (botDb) {
+            const botPayment = await botQuery(
+              `SELECT p.*, u.telegram_id
+               FROM payments p
+               JOIN users u ON u.id = p.user_id
+               WHERE p.id = $1 AND p.status = 'pending'`,
+              [paymentId]
+            )
+            if (botPayment.rows.length > 0) {
+              const bp = botPayment.rows[0]
+              const meta = typeof bp.metadata === 'string' ? JSON.parse(bp.metadata) : (bp.metadata || {})
+              const months: number = meta.months || 1
+              const devices: number = meta.devices || 1
+              const bypassGb: number = meta.bypass_gb || 15
+              const telegramId: number = Number(bp.telegram_id)
+
+              console.log('[YooMoney Webhook] Bot payment found, activating VPN:', { telegramId, months, devices, bypassGb })
+
+              // Активируем VPN через Remnawave
+              let subUrl = ''
+              if (isRemnawaveConfigured()) {
+                try {
+                  const vpnUser = await remnawave.createVpnUser(telegramId, months, devices)
+                  subUrl = vpnUser?.subscription_url || ''
+                  console.log('[YooMoney Webhook] Bot VPN activated:', { subUrl })
+                } catch (e) {
+                  console.error('[YooMoney Webhook] Remnawave error for bot payment:', e)
+                }
+              }
+
+              // Отмечаем платёж как выполненный в бот-БД
+              await botQuery(
+                `UPDATE payments SET status='completed', updated_at=NOW() WHERE id=$1`,
+                [paymentId]
+              )
+
+              // Уведомляем пользователя через бот
+              const bypassStr = bypassGb === 0 ? '♾ Безлимит' : `${bypassGb} ГБ`
+              if (subUrl) {
+                await sendBotMessage(
+                  telegramId,
+                  `🎉 <b>Подписка активирована!</b>\n\n` +
+                  `🗓 Срок подписки: <b>${fmtMonths(months)}</b>\n` +
+                  `⚙️ Кол-во устройств: <b>${devices}</b>\n` +
+                  `☁️ Трафик обходов: <b>${bypassStr}</b>\n\n` +
+                  `🔗 <b>Ваша ссылка подписки:</b>\n` +
+                  `<code>${subUrl}</code>`
+                )
+              } else {
+                await sendBotMessage(
+                  telegramId,
+                  `✅ <b>Оплата принята!</b>\n\n` +
+                  `⚠️ При активации VPN произошла ошибка. Менеджер выдаст подписку вручную.`
+                )
+              }
+
+              return new NextResponse('OK', { status: 200 })
+            }
+          }
+        } catch (botErr) {
+          console.error('[YooMoney Webhook] Bot DB lookup error:', botErr)
+        }
+
+        console.error('[YooMoney Webhook] Payment not found in any DB:', paymentId)
         return new NextResponse('Payment not found', { status: 404 })
       }
 
