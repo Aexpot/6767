@@ -669,8 +669,6 @@ export default function AdminPage() {
     if (activeTab === 'analytics') fetchPaymentStats()
     else if (activeTab === 'users') fetchUsers(1, searchQuery)
     else if (activeTab === 'payments') fetchPayments(1)
-    else if (activeTab === 'faq') fetchFaq()
-    else if (activeTab === 'news') fetchNews()
     else if (activeTab === 'support') fetchTickets()
     else if (activeTab === 'settings') checkRemnawaveStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -990,42 +988,6 @@ export default function AdminPage() {
             currentPage={currentPage} totalPages={totalPages}
             onPage={fetchPayments}
             onUpdate={updatePayment}
-          />
-        )}
-
-        {/* ───────── FAQ ───────── */}
-        {activeTab === 'faq' && (
-          <FaqView
-            items={faqItems} loading={isLoading}
-            onCreate={() => {
-              setSelectedFaqId(null)
-              setFaqForm({ question: '', answer: '', category: 'general', order_index: 0 })
-              setShowFaqModal(true)
-            }}
-            onEdit={(f) => {
-              setSelectedFaqId(f.id)
-              setFaqForm({ question: f.question, answer: f.answer, category: f.category, order_index: f.order_index })
-              setShowFaqModal(true)
-            }}
-            onToggle={toggleFaq} onDelete={deleteFaq}
-          />
-        )}
-
-        {/* ───────── NEWS ───────── */}
-        {activeTab === 'news' && (
-          <NewsView
-            items={newsItems} loading={isLoading}
-            onCreate={() => {
-              setSelectedNewsId(null)
-              setNewsForm({ title: '', content: '', category: 'general', is_published: false })
-              setShowNewsModal(true)
-            }}
-            onEdit={(n) => {
-              setSelectedNewsId(n.id)
-              setNewsForm({ title: n.title, content: n.content, category: n.category, is_published: n.is_published })
-              setShowNewsModal(true)
-            }}
-            onToggle={toggleNews} onDelete={deleteNews}
           />
         )}
 
