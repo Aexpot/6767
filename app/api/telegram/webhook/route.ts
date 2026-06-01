@@ -154,10 +154,10 @@ export async function POST(request: NextRequest) {
 
     // Handle /start command
     if (update.message?.text?.startsWith('/start')) {
-      const chatId = update.message.chat.id
-      const userId = update.message.from.id
-      const firstName = update.message.from.first_name
-      const startParam = update.message.text.split(' ')[1] // Get referral code if present
+      const chatId = update.message!.chat.id
+      const userId = update.message!.from.id
+      const firstName = update.message!.from.first_name
+      const startParam = update.message!.text.split(' ')[1] // Get referral code if present
 
       // Check channel subscription
       const isSubscribed = await checkChannelSubscription(userId)
