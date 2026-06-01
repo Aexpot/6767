@@ -974,10 +974,10 @@ export default function AdminPage() {
             onBulkAction={handleBulkAction}
             onExport={handleExport}
             currentPage={currentPage} totalPages={totalPages}
-            onPage={(p) => fetchUsers(p, searchQuery)}
+            onPage={(p: number) => fetchUsers(p, searchQuery)}
             onUpdateUser={updateUser}
             onCancelSub={cancelSubscription}
-            onGrantSub={(uid) => { setSelectedUserId(uid); setShowSubscriptionModal(true) }}
+            onGrantSub={(uid: string) => { setSelectedUserId(uid); setShowSubscriptionModal(true) }}
           />
         )}
 
@@ -997,7 +997,7 @@ export default function AdminPage() {
             tickets={tickets}
             loading={isLoading}
             statusFilter={ticketStatusFilter}
-            onStatusFilter={(s) => { setTicketStatusFilter(s); fetchTickets(s) }}
+            onStatusFilter={(s: string) => { setTicketStatusFilter(s); fetchTickets(s) }}
             selectedTicket={selectedTicket}
             messages={ticketMessages}
             onOpenTicket={openTicket}
@@ -1462,7 +1462,7 @@ function UsersView({
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e: any) => setSearch(e.target.value)}
             placeholder="Поиск по ID, @username, имени"
             style={{ ...field, paddingLeft: 36 }}
           />
