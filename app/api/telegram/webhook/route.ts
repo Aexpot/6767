@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
       const isSubscribed = await checkChannelSubscription(userId)
 
       if (!isSubscribed && TELEGRAM_CHANNEL_ID) {
-        const channelUrl = `https://t.me/${TELEGRAM_CHANNEL_ID.replace('@', '')}`
+        const channelUrl = `https://t.me/${TELEGRAM_CHANNEL_ID!.replace('@', '')}`
 
         await sendMessage(chatId,
           `<b>Привет, ${firstName}!</b> 👋\n\n` +
