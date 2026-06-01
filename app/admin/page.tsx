@@ -968,7 +968,7 @@ export default function AdminPage() {
             users={users}
             loading={isLoading}
             search={searchQuery} setSearch={setSearchQuery}
-            userFilter={userFilter} setUserFilter={(f) => { setUserFilter(f); setSelectedUsers([]) }}
+            userFilter={userFilter} setUserFilter={(f: string) => { setUserFilter(f); setSelectedUsers([]) }}
             selectedUsers={selectedUsers} toggleSelection={toggleUserSelection}
             showBulk={showBulkActions} setShowBulk={setShowBulkActions}
             onBulkAction={handleBulkAction}
