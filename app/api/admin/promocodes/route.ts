@@ -146,7 +146,7 @@ export async function DELETE(request: NextRequest) {
     const telegramId = request.nextUrl.searchParams.get('telegram_id')
     const id = request.nextUrl.searchParams.get('id')
 
-    if (!telegramId) {
+    if (!telegramId || !id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
