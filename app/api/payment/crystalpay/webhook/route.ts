@@ -33,8 +33,8 @@ export async function POST(request: NextRequest) {
 
     console.log('Payment details:', { id, state, amount, extra })
 
-    // Only process if payment is actually paid (check both 'payed' and 'paid')
-    if (state !== 'payed' && state !== 'paid') {
+    // Only process if payment is actually paid
+    if (state !== 'payed') {
       console.log('Payment not completed, state:', state)
       return NextResponse.json({ ok: true, message: 'Payment not completed yet' })
     }
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       const invoiceInfo = await crystalPay.getInvoice(id)
       console.log('Invoice info from API:', invoiceInfo)
 
-      if (invoiceInfo.status !== 'payed' && invoiceInfo.status !== 'paid') {
+      if (invoiceInfo.status !== 'payed') {
         console.log('Invoice not paid according to API, status:', invoiceInfo.status)
         return NextResponse.json({ ok: true, message: 'Invoice not paid yet' })
       }
