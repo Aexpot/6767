@@ -2377,7 +2377,7 @@ function SupportView({
 
       {loading && <div style={{ color: T.muted, fontSize: 13 }}>Загрузка...</div>}
       {!loading && tickets.length === 0 && (
-        <Empty icon={<ChatCircle size={28} />} label="Тикетов нет" />
+        <Empty text="Тикетов нет" />
       )}
       {!loading && tickets.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
