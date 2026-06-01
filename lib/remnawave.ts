@@ -1,0 +1,518 @@
+// Remnawave VPN Panel API Integration
+// Drop-in replacement for the previous Marzban client.
+// Public methods/return shapes mirror the Marzban client so existing callers
+// don't need substantial rewrites: fields like `expire` (unix seconds),
+// `used_traffic`, `data_limit`, `links`, `subscription_url`, `status`
+// (lowercase) are kept compatible.
+
+export interface RemnawaveUser {
+  uuid: string
+  short_uuid: string
+  username: string
+  status: 'active' | 'disabled' | 'limited' | 'expired'
+  used_traffic: number
+  data_limit: number | null
+  expire: number | null
+  created_at: string
+  links: string[]
+  subscription_url: string
+  note: string | null
+  online_at: string | null
+}
+
+export interface RemnawaveSystemStats {
+  version: string
+  mem_total: number
+  mem_used: number
+  cpu_cores: number
+  cpu_usage: number
+  total_user: number
+  users_active: number
+  incoming_bandwidth: number
+  outgoing_bandwidth: number
+  incoming_bandwidth_speed: number
+  outgoing_bandwidth_speed: number
+}
+
+export interface RemnawaveInbound {
+  tag: string
+  protocol: string
+  network: string
+  tls: string
+  port: number
+}
+
+interface RawRemnawaveUser {
+  uuid: string
+  shortUuid: string
+  username: string
+  status: 'ACTIVE' | 'DISABLED' | 'LIMITED' | 'EXPIRED'
+  trafficLimitBytes: number
+  trafficLimitStrategy: string
+  expireAt: string | null
+  telegramId: number | null
+  description: string | null
+  subscriptionUrl: string
+  createdAt: string
+  updatedAt: string
+  activeInternalSquads: Array<{ uuid: string; name: string }>
+  userTraffic?: {
+    usedTrafficBytes: number
+    lifetimeUsedTrafficBytes: number
+    onlineAt: string | null
+    lastConnectedNodeUuid: string | null
+    firstConnectedAt: string | null
+  }
+}
+
+function mapUser(u: RawRemnawaveUser, links: string[] = []): RemnawaveUser {
+  const expireSec = u.expireAt ? Math.floor(new Date(u.expireAt).getTime() / 1000) : null
+  return {
+    uuid: u.uuid,
+    short_uuid: u.shortUuid,
+    username: u.username,
+    status: (u.status?.toLowerCase() as RemnawaveUser['status']) || 'active',
+    used_traffic: u.userTraffic?.usedTrafficBytes ?? 0,
+    data_limit: u.trafficLimitBytes && u.trafficLimitBytes > 0 ? u.trafficLimitBytes : null,
+    expire: expireSec,
+    created_at: u.createdAt,
+    links,
+    subscription_url: u.subscriptionUrl,
+    note: u.description,
+    online_at: u.userTraffic?.onlineAt ?? null,
+  }
+}
+
+class RemnawaveClient {
+  private baseUrl: string
+  private authQuery: string
+  private token: string
+
+  constructor() {
+    this.baseUrl = (process.env.REMNAWAVE_API_URL || '').replace(/\/$/, '')
+    this.authQuery = process.env.REMNAWAVE_AUTH_QUERY || '' // e.g. "tusdYCcc=LJaWKMpB"
+    this.token = process.env.REMNAWAVE_API_TOKEN || ''
+  }
+
+  private get squadUuid(): string {
+    return process.env.REMNAWAVE_SQUAD_UUID || ''
+  }
+
+  private buildUrl(path: string, extraQuery: Record<string, string | number> = {}): string {
+    const url = new URL(`${this.baseUrl}${path}`)
+    if (this.authQuery) {
+      const [k, v] = this.authQuery.split('=')
+      if (k) url.searchParams.set(k, v ?? '')
+    }
+    for (const [k, v] of Object.entries(extraQuery)) {
+      url.searchParams.set(k, String(v))
+    }
+    return url.toString()
+  }
+
+  private async request<T>(path: string, options: RequestInit = {}, extraQuery: Record<string, string | number> = {}): Promise<T> {
+    if (!this.baseUrl || !this.token) {
+      throw new Error('Remnawave credentials not configured')
+    }
+    const response = await fetch(this.buildUrl(path, extraQuery), {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string> | undefined),
+      },
+    })
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`Remnawave API error: ${response.status} - ${error}`)
+    }
+    const json = await response.json() as { response: T }
+    return json.response
+  }
+
+  // ─────────────── Internal helpers ───────────────
+  private async getRawByUsername(username: string): Promise<RawRemnawaveUser> {
+    try {
+      return await this.request<RawRemnawaveUser>(`/api/users/by-username/${encodeURIComponent(username)}`)
+    } catch (error) {
+      const data = await this.request<{ total: number; users: RawRemnawaveUser[] }>(
+        '/api/users',
+        {},
+        { search: username, size: 25 },
+      )
+      const user = data.users.find((u) => u.username === username)
+      if (user) return user
+      throw error
+    }
+  }
+
+  private isUsernameExistsError(error: unknown): boolean {
+    return error instanceof Error && (error.message.includes('A019') || error.message.includes('username already exists'))
+  }
+
+  private async updateRawUser(
+    raw: RawRemnawaveUser,
+    data: Partial<{
+      expire: number | null
+      data_limit: number
+      status: 'active' | 'disabled'
+      note: string
+      device_limit: number
+    }>,
+  ): Promise<RemnawaveUser> {
+    const body: Record<string, unknown> = { uuid: raw.uuid }
+    if (data.expire !== undefined) {
+      body.expireAt = data.expire ? new Date(data.expire * 1000).toISOString() : null
+    }
+    if (data.data_limit !== undefined) body.trafficLimitBytes = data.data_limit
+    if (data.note !== undefined) body.description = data.note
+    if (data.device_limit !== undefined) body.hwidDeviceLimit = data.device_limit
+
+    let updated: RawRemnawaveUser
+    if (Object.keys(body).length > 1) {
+      updated = await this.request<RawRemnawaveUser>('/api/users', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      })
+    } else {
+      updated = raw
+    }
+
+    if (data.status) {
+      const action = data.status === 'active' ? 'enable' : 'disable'
+      updated = await this.request<RawRemnawaveUser>(`/api/users/${raw.uuid}/actions/${action}`, { method: 'POST' })
+    }
+
+    return mapUser(updated)
+  }
+
+  // Try to fetch raw vless/ss/trojan links from subscription endpoint.
+  // Remnawave's /api/sub/{shortUuid} returns base64-encoded list of links.
+  private async fetchLinks(shortUuid: string): Promise<string[]> {
+    try {
+      const url = this.buildUrl(`/api/sub/${shortUuid}`)
+      const r = await fetch(url, { headers: { 'User-Agent': 'v2rayN/6.0' } })
+      if (!r.ok) return []
+      const text = await r.text()
+      // Try base64 decode first
+      try {
+        const decoded = Buffer.from(text.trim(), 'base64').toString('utf-8')
+        if (/^(vless|vmess|trojan|ss):\/\//m.test(decoded)) {
+          return decoded.split(/\r?\n/).filter(l => /^(vless|vmess|trojan|ss):\/\//.test(l))
+        }
+      } catch {}
+      // Otherwise treat as raw text with one link per line
+      return text.split(/\r?\n/).filter(l => /^(vless|vmess|trojan|ss):\/\//.test(l))
+    } catch {
+      return []
+    }
+  }
+
+  // ─────────────── User Management ───────────────
+  async createUser(data: {
+    username: string
+    expire?: number | null
+    data_limit?: number
+    status?: 'active' | 'disabled'
+    note?: string
+    telegram_id?: number
+    device_limit?: number
+  }): Promise<RemnawaveUser> {
+    const body: Record<string, unknown> = {
+      username: data.username,
+      status: (data.status || 'active').toUpperCase(),
+      trafficLimitBytes: data.data_limit ?? 0,
+      trafficLimitStrategy: 'NO_RESET',
+    }
+    if (data.expire) body.expireAt = new Date(data.expire * 1000).toISOString()
+    if (this.squadUuid) body.activeInternalSquads = [this.squadUuid]
+    if (data.telegram_id) body.telegramId = Number(data.telegram_id)
+    if (data.note) body.description = data.note
+    if (data.device_limit && data.device_limit > 0) body.hwidDeviceLimit = data.device_limit
+
+    const raw = await this.request<RawRemnawaveUser>('/api/users', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    return mapUser(raw)
+  }
+
+  async getUser(username: string): Promise<RemnawaveUser> {
+    const raw = await this.getRawByUsername(username)
+    return mapUser(raw)
+  }
+
+  async updateUser(
+    username: string,
+    data: Partial<{
+      expire: number | null
+      data_limit: number
+      status: 'active' | 'disabled'
+      note: string
+      device_limit: number
+    }>,
+  ): Promise<RemnawaveUser> {
+    const raw = await this.getRawByUsername(username)
+    return this.updateRawUser(raw, data)
+  }
+
+  async deleteUser(username: string): Promise<void> {
+    const raw = await this.getRawByUsername(username)
+    await this.request(`/api/users/${raw.uuid}`, { method: 'DELETE' })
+  }
+
+  async resetUserDataUsage(username: string): Promise<RemnawaveUser> {
+    const raw = await this.getRawByUsername(username)
+    const updated = await this.request<RawRemnawaveUser>(`/api/users/${raw.uuid}/actions/reset-traffic`, { method: 'POST' })
+    return mapUser(updated)
+  }
+
+  async revokeUserSubscription(username: string): Promise<RemnawaveUser> {
+    const raw = await this.getRawByUsername(username)
+    const updated = await this.request<RawRemnawaveUser>(`/api/users/${raw.uuid}/actions/revoke`, { method: 'POST' })
+    return mapUser(updated)
+  }
+
+  async getUsers(params?: {
+    offset?: number
+    limit?: number
+    username?: string
+    status?: string
+  }): Promise<{ users: RemnawaveUser[]; total: number }> {
+    const q: Record<string, string | number> = {}
+    if (params?.offset != null) q.start = params.offset
+    if (params?.limit != null) q.size = params.limit
+    if (params?.username) q.search = params.username
+    if (params?.status) q.status = params.status.toUpperCase()
+
+    const data = await this.request<{ total: number; users: RawRemnawaveUser[] }>('/api/users', {}, q)
+    return { users: data.users.map(u => mapUser(u)), total: data.total }
+  }
+
+  // ─────────────── System ───────────────
+  async getSystemStats(): Promise<RemnawaveSystemStats> {
+    const raw = await this.request<{
+      cpu: { cores: number; usage?: number }
+      memory: { total: number; used: number; free: number }
+      uptime: number
+      users: { totalUsers: number; statusCounts: Record<string, number> }
+      onlineStats: { onlineNow: number }
+      nodes: { totalOnline: number; totalBytesLifetime: string }
+      version?: string
+    }>('/api/system/stats')
+
+    return {
+      version: raw.version || 'remnawave',
+      mem_total: raw.memory.total,
+      mem_used: raw.memory.used,
+      cpu_cores: raw.cpu.cores,
+      cpu_usage: raw.cpu.usage ?? 0,
+      total_user: raw.users.totalUsers,
+      users_active: raw.users.statusCounts?.ACTIVE ?? 0,
+      incoming_bandwidth: Number(raw.nodes.totalBytesLifetime) || 0,
+      outgoing_bandwidth: Number(raw.nodes.totalBytesLifetime) || 0,
+      incoming_bandwidth_speed: 0,
+      outgoing_bandwidth_speed: 0,
+    }
+  }
+
+  async getInbounds(): Promise<Record<string, RemnawaveInbound[]>> {
+    // Map Remnawave internal-squads to legacy {protocol: Inbound[]} shape
+    const data = await this.request<{
+      total: number
+      internalSquads: Array<{ uuid: string; name: string; inbounds: Array<{ tag: string; type: string; network: string; security: string; port: number }> }>
+    }>('/api/internal-squads')
+
+    const result: Record<string, RemnawaveInbound[]> = {}
+    for (const squad of data.internalSquads) {
+      for (const inb of squad.inbounds) {
+        const key = inb.type
+        if (!result[key]) result[key] = []
+        result[key].push({ tag: inb.tag, protocol: inb.type, network: inb.network, tls: inb.security, port: inb.port })
+      }
+    }
+    return result
+  }
+
+  // ─────────────── Subscription helpers ───────────────
+  getSubscriptionUrl(username: string): string {
+    // Best-effort synchronous URL — caller may pass tg_<id>.
+    // Real subscriptionUrl uses shortUuid, but tg-username variant works
+    // for compatibility with Marzban URL patterns when overriden via env.
+    const subBase = process.env.REMNAWAVE_SUB_URL?.replace(/\/$/, '')
+    if (subBase) return `${subBase}/${username}`
+    return `${this.baseUrl}/sub/${username}`
+  }
+
+  async getSubscriptionUrlWithToken(telegramId: number): Promise<string> {
+    const username = `tg_${telegramId}`
+    try {
+      const u = await this.getRawByUsername(username)
+      return u.subscriptionUrl || this.getSubscriptionUrl(username)
+    } catch {
+      return this.getSubscriptionUrl(username)
+    }
+  }
+
+  // Helper to create VPN user for new subscription. If user already exists,
+  // extends current expiry (so re-payment = продление).
+  async createVpnUser(telegramId: number, months: number, deviceLimit?: number): Promise<RemnawaveUser> {
+    const username = `tg_${telegramId}`
+    const nowSec = Math.floor(Date.now() / 1000)
+    const addSec = months * 30 * 24 * 60 * 60
+    const extendExistingUser = async (raw: RawRemnawaveUser) => {
+      const currentExpiry = raw.expireAt ? Math.floor(new Date(raw.expireAt).getTime() / 1000) : nowSec
+      const baseTime = currentExpiry > nowSec ? currentExpiry : nowSec
+      const newExpiry = baseTime + addSec
+      const patch: Parameters<RemnawaveClient['updateUser']>[1] = { expire: newExpiry, status: 'active' }
+      if (deviceLimit != null) patch.device_limit = deviceLimit
+      return this.updateRawUser(raw, patch)
+    }
+
+    try {
+      const raw = await this.getRawByUsername(username)
+      return await extendExistingUser(raw)
+    } catch (lookupError) {
+      try {
+        return await this.createUser({
+          username,
+          expire: nowSec + addSec,
+          status: 'active',
+          note: `Telegram ID: ${telegramId}`,
+          telegram_id: telegramId,
+          device_limit: deviceLimit,
+        })
+      } catch (createError) {
+        if (!this.isUsernameExistsError(createError)) {
+          throw createError
+        }
+
+        console.log('[Remnawave] User already exists, extending subscription instead:', username)
+        const raw = await this.getRawByUsername(username)
+        return await extendExistingUser(raw)
+      }
+    }
+  }
+
+  async extendSubscription(telegramId: number, months: number, deviceLimit?: number): Promise<RemnawaveUser> {
+    return this.createVpnUser(telegramId, months, deviceLimit)
+  }
+
+  async setDeviceLimit(telegramId: number, deviceLimit: number): Promise<RemnawaveUser> {
+    const username = `tg_${telegramId}`
+    return this.updateUser(username, { device_limit: deviceLimit })
+  }
+
+  async getUserLinks(telegramId: number): Promise<string[] | null> {
+    try {
+      const username = `tg_${telegramId}`
+      const raw = await this.getRawByUsername(username)
+      return await this.fetchLinks(raw.shortUuid)
+    } catch {
+      return null
+    }
+  }
+
+  async checkSubscription(telegramId: number): Promise<{
+    active: boolean
+    expiresAt: Date | null
+    usedTraffic: number
+    dataLimit: number | null
+    links: string[]
+    subscriptionUrl: string
+  } | null> {
+    try {
+      const username = `tg_${telegramId}`
+      const raw = await this.getRawByUsername(username)
+      const links = await this.fetchLinks(raw.shortUuid)
+      const expiresAt = raw.expireAt ? new Date(raw.expireAt) : null
+      const active = raw.status === 'ACTIVE' && (!expiresAt || expiresAt.getTime() > Date.now())
+      return {
+        active,
+        expiresAt,
+        usedTraffic: raw.userTraffic?.usedTrafficBytes ?? 0,
+        dataLimit: raw.trafficLimitBytes && raw.trafficLimitBytes > 0 ? raw.trafficLimitBytes : null,
+        links,
+        subscriptionUrl: raw.subscriptionUrl || this.getSubscriptionUrl(username),
+      }
+    } catch {
+      return null
+    }
+  }
+
+  async disableUser(telegramId: number): Promise<RemnawaveUser> {
+    const username = `tg_${telegramId}`
+    return this.updateUser(username, { status: 'disabled' })
+  }
+
+  async createOrUpdateUser(telegramId: number, expireTimestamp: number, dataLimit: number): Promise<RemnawaveUser> {
+    const username = `tg_${telegramId}`
+    try {
+      await this.getRawByUsername(username)
+      return await this.updateUser(username, { expire: expireTimestamp, data_limit: dataLimit, status: 'active' })
+    } catch {
+      return await this.createUser({
+        username,
+        expire: expireTimestamp,
+        data_limit: dataLimit,
+        status: 'active',
+        note: `Telegram ID: ${telegramId}`,
+        telegram_id: telegramId,
+      })
+    }
+  }
+
+  // Returns list of devices from GET /api/hwid/devices/{userUuid}
+  // Response shape: { response: { hwid, deviceModel, platform, osVersion, userAgent, createdAt }[] }
+  async getUserDevices(telegramId: number): Promise<{ hwid: string; deviceModel: string | null; platform: string | null; osVersion: string | null; userAgent: string | null; createdAt: string | null }[]> {
+    const username = `tg_${telegramId}`
+    try {
+      const raw = await this.getRawByUsername(username)
+      // request() already unwraps json.response, so data is directly the array
+      const data = await this.request<any[]>(`/api/hwid/devices/${raw.uuid}`)
+      const list: any[] = Array.isArray(data) ? data : []
+      return list.map((d: any) => ({
+        hwid: d.hwid ?? d.id ?? String(d),
+        deviceModel: d.deviceModel ?? d.device_model ?? null,
+        platform: d.platform ?? null,
+        osVersion: d.osVersion ?? d.os_version ?? null,
+        userAgent: d.userAgent ?? d.user_agent ?? null,
+        createdAt: d.createdAt ?? d.created_at ?? null,
+      }))
+    } catch {
+      return []
+    }
+  }
+
+  // POST /api/hwid/devices/delete  { userUuid, hwid }
+  async disconnectDevice(telegramId: number, hwid: string): Promise<boolean> {
+    const username = `tg_${telegramId}`
+    try {
+      const raw = await this.getRawByUsername(username)
+      await this.request(`/api/hwid/devices/delete`, {
+        method: 'POST',
+        body: JSON.stringify({ userUuid: raw.uuid, hwid }),
+      })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async getUserMaxDevices(telegramId: number): Promise<number> {
+    const username = `tg_${telegramId}`
+    try {
+      const raw = await this.getRawByUsername(username)
+      return (raw as any).hwidDeviceLimit ?? 0
+    } catch {
+      return 0
+    }
+  }
+}
+
+// Export singleton instance
+export const remnawave = new RemnawaveClient()
+
+export function isRemnawaveConfigured(): boolean {
+  return !!(process.env.REMNAWAVE_API_URL && process.env.REMNAWAVE_API_TOKEN)
+}

@@ -1,0 +1,8 @@
+Collecting aiogram==3.7.0
+  Using cached aiogram-3.7.0-py3-none-any.whl.metadata (7.3 kB)
+Requirement already satisfied: python-dotenv==1.0.1 in c:\users\user\appdata\local\programs\python\python313\lib\site-packages (1.0.1)
+Collecting asyncpg
+  Using cached asyncpg-0.31.0-cp313-cp313-win_amd64.whl.metadata (4.5 kB)
+Collecting aiofiles~=23.2.1 (from aiogram==3.7.0)
+  Using cached aiofiles-23.2.1-py3-none-any.whl.metadata (9.7 kB)
+INFO: pip is looking at multiple versions of aiogram to determine which version is compatible with other requirements. This could take a while.
