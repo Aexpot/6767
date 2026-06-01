@@ -997,7 +997,7 @@ export default function AdminPage() {
             tickets={tickets}
             loading={isLoading}
             statusFilter={ticketStatusFilter}
-            onStatusFilter={(s: string) => { setTicketStatusFilter(s); fetchTickets(s) }}
+            onStatusFilter={(s: 'all' | 'open' | 'closed') => { setTicketStatusFilter(s); fetchTickets(s) }}
             selectedTicket={selectedTicket}
             messages={ticketMessages}
             onOpenTicket={openTicket}
