@@ -88,16 +88,33 @@ export async function POST(request: NextRequest) {
     const subscription = subResult.rows[0]
 
     // Create CryptoPay invoice
-    const invoice = await cryptoPay.createInvoice({
-      asset: asset,
-      amount: amountUsd,
-      description: `ChampionVPN ${plan.name}`,
-      payload: JSON.stringify({
-        telegram_id,
-        subscription_id: subscription.id,
-        plan_id
+    let invoice
+    try {
+      invoice = await cryptoPay.createInvoice({
+        asset: asset,
+        amount: amountUsd,
+        description: `ChampionVPN ${plan.name}`,
+        payload: JSON.stringify({
+          telegram_id,
+          subscription_id: subscription.id,
+          plan_id
+        })
       })
-    })
+      
+      if (!invoice) {
+        return NextResponse.json({
+          error: 'Failed to create payment. CryptoPay API returned empty response.',
+          details: 'Check API token configuration'
+        }, { status: 500 })
+      }
+    } catch (invoiceError) {
+      console.error('CryptoPay invoice creation error:', invoiceError)
+      return NextResponse.json({
+        error: 'Unable to create payment invoice',
+        details: invoiceError instanceof Error ? invoiceError.message : 'Unknown error',
+        hint: 'Check if CRYPTOPAY_API_TOKEN is configured correctly'
+      }, { status: 500 })
+    }
 
     console.log('CryptoPay invoice created:', invoice)
 
@@ -138,9 +155,21 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('API error:', error)
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    
+    // Check if it's a token configuration issue
+    if (errorMsg.includes('not configured') || errorMsg.includes('CRYPTOPAY_API_TOKEN')) {
+      return NextResponse.json({
+        error: 'Payment system not configured',
+        details: 'CryptoPay API token is missing or invalid',
+        hint: 'Admin: Check CRYPTOPAY_API_TOKEN in environment variables'
+      }, { status: 503 })
+    }
+    
     return NextResponse.json({
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Unable to transfer - payment system error',
+      details: errorMsg,
+      code: 'PAYMENT_ERROR'
     }, { status: 500 })
   }
 }

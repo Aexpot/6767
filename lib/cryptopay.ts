@@ -29,6 +29,10 @@ class CryptoPayClient {
   }
 
   private async request<T>(method: string, params: Record<string, any> = {}): Promise<T> {
+    if (!this.token) {
+      throw new Error('CRYPTOPAY_API_TOKEN is not configured. Check your environment variables.')
+    }
+    
     const response = await fetch(`${this.baseUrl}/${method}`, {
       method: 'POST',
       headers: {
@@ -41,7 +45,8 @@ class CryptoPayClient {
     const data = await response.json()
 
     if (!data.ok) {
-      throw new Error(`Api response error ${JSON.stringify(data.error)}`)
+      const errorMsg = data.error?.message || JSON.stringify(data.error) || 'Unknown error'
+      throw new Error(`CryptoPay API error: ${errorMsg}`)
     }
 
     return data.result as T
