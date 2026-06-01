@@ -35,9 +35,9 @@ class Config:
 
 
 def load_config() -> Config:
-    token = os.getenv("BOT_TOKEN", "").strip()
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
-        raise RuntimeError("Set BOT_TOKEN in .env before starting the bot.")
+        raise RuntimeError("Set TELEGRAM_BOT_TOKEN in .env before starting the bot.")
 
     admin_ids = {
         int(item.strip())
