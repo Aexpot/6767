@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     console.log('Invoice status from CrystalPay:', invoice.status)
 
-    if (invoice.status !== 'payed' && invoice.status !== 'paid') {
+    if (invoice.status !== 'payed') {
       return NextResponse.json({
         success: false,
         message: 'Платеж еще не оплачен',
