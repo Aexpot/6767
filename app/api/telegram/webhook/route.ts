@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
 
     // Handle /help command
     else if (update.message?.text === '/help') {
-      const chatId = update.message.chat.id
+      const chatId = update.message!.chat.id
 
       await sendMessage(chatId,
         `<b>📖 Как пользоваться ChampionVPN</b>\n\n` +
@@ -241,7 +241,7 @@ export async function POST(request: NextRequest) {
 
     // Handle /support command
     else if (update.message?.text === '/support') {
-      const chatId = update.message.chat.id
+      const chatId = update.message!.chat.id
       const supportUsername = process.env.NEXT_PUBLIC_SUPPORT_TELEGRAM_USERNAME || 'support'
 
       await sendMessage(chatId,
@@ -267,8 +267,8 @@ export async function POST(request: NextRequest) {
 
     // Handle /referral command
     else if (update.message?.text === '/referral') {
-      const chatId = update.message.chat.id
-      const userId = update.message.from.id
+      const chatId = update.message!.chat.id
+      const userId = update.message!.from.id
       const referralLink = `https://t.me/${BOT_USERNAME}?start=ref${userId}`
 
       await sendMessage(chatId,
@@ -290,7 +290,7 @@ export async function POST(request: NextRequest) {
 
     // Handle /account command
     else if (update.message?.text === '/account') {
-      const chatId = update.message.chat.id
+      const chatId = update.message!.chat.id
 
       await sendMessage(chatId,
         `<b>👤 Личный кабинет</b>\n\n` +
@@ -311,8 +311,8 @@ export async function POST(request: NextRequest) {
 
     // Handle /admin command (only for admins)
     else if (update.message?.text === '/admin') {
-      const chatId = update.message.chat.id
-      const userId = update.message.from.id
+      const chatId = update.message!.chat.id
+      const userId = update.message!.from.id
 
       if (!isAdmin(userId)) {
         await sendMessage(chatId, '❌ У вас нет доступа к админ-панели.')
