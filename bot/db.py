@@ -346,6 +346,41 @@ async def get_active_subscription(telegram_id: int) -> Optional[Dict[str, Any]]:
         return dict(row) if row else None
 
 
+async def expire_user_subscriptions(telegram_id: int) -> None:
+    """Mark a user's expired subscriptions inactive in bot and webapp storage."""
+    try:
+        async with get_pool().acquire() as conn:
+            await conn.execute(
+                """UPDATE subscriptions s
+                   SET status='expired', updated_at=NOW()
+                   FROM users u
+                   WHERE s.user_id = u.id
+                     AND u.telegram_id = $1
+                     AND s.status IN ('active', 'trial', 'pending')""",
+                telegram_id,
+            )
+    except Exception:
+        log.exception("expire_user_subscriptions failed in bot DB for telegram_id=%s", telegram_id)
+
+    pool = get_webapp_pool()
+    if not pool:
+        return
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """UPDATE subscriptions s
+                   SET is_active=FALSE,
+                       status_from_panel='EXPIRED'
+                   FROM users u
+                   WHERE s.user_id = u.user_id
+                     AND u.telegram_id = $1
+                     AND s.is_active = TRUE""",
+                telegram_id,
+            )
+    except Exception:
+        log.exception("expire_user_subscriptions failed in webapp DB for telegram_id=%s", telegram_id)
+
+
 async def upsert_subscription(
     telegram_id: int,
     plan_id: str,

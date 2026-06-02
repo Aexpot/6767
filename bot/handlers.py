@@ -112,6 +112,48 @@ async def _get_plan_or_fallback(months: int):
     return None, float(FALLBACK_PLAN_PRICES_RUB.get(months, 149 * months))
 
 
+def _subscription_is_expired(sub: dict | None) -> bool:
+    if not sub or sub.get("active"):
+        return False
+    if str(sub.get("status") or "").lower() == "expired":
+        return True
+    expires_at = sub.get("expires_at")
+    if not expires_at:
+        return False
+    return expires_at.timestamp() <= datetime.now(tz=timezone.utc).timestamp()
+
+
+async def _delete_expired_subscription(user_id: int, rw=None) -> bool:
+    from bot import db, remnawave as rw_module
+
+    removed = False
+    try:
+        rw = rw or rw_module.get_remnawave()
+        await rw.delete_user(f"tg_{user_id}")
+        removed = True
+    except Exception as exc:
+        log.warning("Failed to delete expired Remnawave user tg_%s: %s", user_id, exc)
+
+    try:
+        await db.expire_user_subscriptions(user_id)
+        removed = True
+    except Exception as exc:
+        log.warning("Failed to mark expired subscriptions for tg_%s: %s", user_id, exc)
+
+    return removed
+
+
+async def _check_subscription_clean(user_id: int) -> dict | None:
+    from bot import remnawave as rw_module
+
+    rw = rw_module.get_remnawave()
+    sub = await rw.check_subscription(user_id)
+    if _subscription_is_expired(sub):
+        await _delete_expired_subscription(user_id, rw)
+        return None
+    return sub
+
+
 # ── states ────────────────────────────────────────────────────────────────────
 
 class PromoState(StatesGroup):
@@ -164,8 +206,7 @@ async def start(message: Message) -> None:
         return
 
     try:
-        rw = rw_module.get_remnawave()
-        sub = await rw.check_subscription(user_id)
+        sub = await _check_subscription_clean(user_id)
     except Exception:
         sub = None
 
@@ -196,7 +237,7 @@ async def start(message: Message) -> None:
         f"❞"
     )
 
-    has_subscription = bool(sub and (sub.get("active") or sub.get("subscription_url")))
+    has_subscription = bool(sub and sub.get("active"))
     await _send(message, "account.png", caption,
                 main_menu(_cfg().support_url, _cfg().instruction_url, _cfg().channel_url,
                           _cfg().mini_app_url, has_subscription=has_subscription))
@@ -214,8 +255,7 @@ async def home(callback: CallbackQuery) -> None:
         user = {"balance_rub": 0}
 
     try:
-        rw = rw_module.get_remnawave()
-        sub = await rw.check_subscription(user_id)
+        sub = await _check_subscription_clean(user_id)
     except Exception:
         sub = None
 
@@ -234,7 +274,7 @@ async def home(callback: CallbackQuery) -> None:
         f"Статус: <b>{status_line}</b>\n"
         f"❞"
     )
-    has_subscription = bool(sub and (sub.get("active") or sub.get("subscription_url")))
+    has_subscription = bool(sub and sub.get("active"))
     await _edit(callback, "account.png", caption,
                 main_menu(_cfg().support_url, _cfg().instruction_url, _cfg().channel_url,
                           _cfg().mini_app_url, has_subscription=has_subscription))
@@ -247,12 +287,11 @@ async def subscription(callback: CallbackQuery) -> None:
     from bot import remnawave as rw_module
     user_id = callback.from_user.id
     try:
-        rw = rw_module.get_remnawave()
-        sub = await rw.check_subscription(user_id)
+        sub = await _check_subscription_clean(user_id)
     except Exception:
         sub = None
 
-    if sub and (sub["active"] or sub.get("subscription_url")):
+    if sub and sub["active"]:
         used = _fmt_bytes(sub.get("used_traffic", 0))
         limit = _fmt_bytes(sub["data_limit"]) if sub.get("data_limit") else "∞"
         exp = _fmt_expire(int(sub["expires_at"].timestamp()) if sub.get("expires_at") else None)
@@ -596,13 +635,12 @@ async def auto_import(callback: CallbackQuery) -> None:
     from bot import remnawave as rw_module
     user_id = callback.from_user.id
     try:
-        rw = rw_module.get_remnawave()
-        sub = await rw.check_subscription(user_id)
+        sub = await _check_subscription_clean(user_id)
     except Exception:
         sub = None
 
     sub_url = (sub or {}).get("subscription_url")
-    if not sub_url:
+    if not sub or not sub.get("active") or not sub_url:
         await callback.answer("❌ У вас нет активной подписки. Сначала оформите её.", show_alert=True)
         return
 
@@ -698,10 +736,19 @@ async def devices(callback: CallbackQuery) -> None:
     from bot import remnawave as rw_module
     user_id = callback.from_user.id
     try:
-        rw = rw_module.get_remnawave()
-        sub, devices_list = await device_module.load_user_devices(rw, user_id)
+        sub = await _check_subscription_clean(user_id)
     except Exception:
         sub = None
+
+    if not sub or not sub.get("active"):
+        await callback.answer("Подписка истекла или отсутствует.", show_alert=True)
+        await home(callback)
+        return
+
+    try:
+        rw = rw_module.get_remnawave()
+        devices_list = await rw.get_user_devices(user_id)
+    except Exception:
         devices_list = []
 
     caption = device_module.render_devices_caption(sub, devices_list)
@@ -719,6 +766,11 @@ async def device_disconnect(callback: CallbackQuery) -> None:
         return await callback.answer("Неверный номер устройства.", show_alert=True)
 
     try:
+        sub = await _check_subscription_clean(callback.from_user.id)
+        if not sub or not sub.get("active"):
+            await callback.answer("Подписка истекла или отсутствует.", show_alert=True)
+            await home(callback)
+            return
         rw = rw_module.get_remnawave()
         ok, message = await device_module.disconnect_user_device(rw, callback.from_user.id, index)
     except Exception:
@@ -770,9 +822,8 @@ async def device_install(callback: CallbackQuery) -> None:
     text = instructions.get(platform, "Инструкция скоро.")
 
     try:
-        rw = rw_module.get_remnawave()
-        sub = await rw.check_subscription(user_id)
-        if sub and sub.get("subscription_url"):
+        sub = await _check_subscription_clean(user_id)
+        if sub and sub.get("active") and sub.get("subscription_url"):
             text += f"\n\n🔗 <b>Ваша ссылка:</b>\n<code>{sub['subscription_url']}</code>"
     except Exception:
         pass
@@ -789,12 +840,11 @@ async def traffic(callback: CallbackQuery) -> None:
     from bot import remnawave as rw_module
     user_id = callback.from_user.id
     try:
-        rw = rw_module.get_remnawave()
-        sub = await rw.check_subscription(user_id)
+        sub = await _check_subscription_clean(user_id)
     except Exception:
         sub = None
 
-    if sub:
+    if sub and sub.get("active"):
         wl = await db.get_webapp_whitelist_traffic(user_id)
         bypass_used = _fmt_bytes((wl or {}).get("used", 0))
         bypass_limit = "∞" if (wl or {}).get("unlimited") else _fmt_bytes((wl or {}).get("limit", 0))
