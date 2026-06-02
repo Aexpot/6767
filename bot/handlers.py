@@ -850,12 +850,7 @@ async def traffic(callback: CallbackQuery) -> None:
         bypass_limit = "∞" if (wl or {}).get("unlimited") else _fmt_bytes((wl or {}).get("limit", 0))
         caption = (
             f"☁️ <b>Трафик</b>\n\n"
-            f"Простой трафик: <b>безлим</b>\n"
-            f"Обход белых списков: <b>{bypass_used} / {bypass_limit}</b>\n\n"
-            f"<b>Использовано:</b>\n\n"
-            f"🌐 Обычные сервера: <b>∞</b>\n"
-            f"🏳️ Белые списки: <b>{bypass_used} / {bypass_limit}</b>\n\n"
-            "Кнопка ниже докупает ГБ белых списков."
+            f"Обход белых списков: <b>{bypass_used} / {bypass_limit}</b>"
         )
     else:
         caption = "☁️ <b>Трафик</b>\n\nДля просмотра оформите подписку."
