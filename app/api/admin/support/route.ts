@@ -3,8 +3,24 @@ import { query } from '@/lib/db'
 
 async function isAdmin(telegramId: string | null): Promise<boolean> {
   if (!telegramId) return false
-  const adminIds = process.env.ADMIN_TELEGRAM_IDS?.split(',').map(s => s.trim()) || []
-  return adminIds.includes(telegramId)
+  const adminIds = (process.env.ADMIN_TELEGRAM_IDS || process.env.ADMIN_IDS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+  if (adminIds.includes(telegramId)) return true
+
+  const tid = Number(telegramId)
+  if (!Number.isFinite(tid)) return false
+
+  try {
+    const result = await query(
+      'SELECT is_admin FROM users WHERE telegram_id = $1 LIMIT 1',
+      [tid],
+    )
+    return Boolean(result.rows[0]?.is_admin)
+  } catch {
+    return false
+  }
 }
 
 // GET /api/admin/support?telegram_id=xxx[&status=open|closed|all][&ticket_id=123]
