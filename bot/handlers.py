@@ -22,11 +22,11 @@ from bot.keyboards import (
     bypass_traffic_menu,
     cancel_menu,
     devices_count_menu,
-    devices_menu,
     main_menu,
     payment_choice_menu,
     promo_menu,
     referral_menu,
+    reset_link_confirm_menu,
     subscription_menu,
     traffic_menu,
 )
@@ -36,6 +36,13 @@ log = logging.getLogger(__name__)
 ASSETS = Path(__file__).resolve().parent / "assets"
 router = Router()
 config: Config | None = None
+
+FALLBACK_PLAN_PRICES_RUB = {
+    1: 149,
+    3: 399,
+    6: 699,
+    12: 1190,
+}
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -90,6 +97,19 @@ def _fmt_expire(ts: int | None) -> str:
         return "не задан"
     dt = datetime.fromtimestamp(ts, tz=timezone.utc)
     return dt.strftime("%d.%m.%Y")
+
+
+async def _get_plan_or_fallback(months: int):
+    from bot import db
+
+    try:
+        plan = await db.get_plan_by_months(months)
+        if plan:
+            return plan, float(plan["price_rub"])
+    except Exception as exc:
+        log.warning("DB get_plan_by_months failed, using fallback price: %s", exc)
+
+    return None, float(FALLBACK_PLAN_PRICES_RUB.get(months, 149 * months))
 
 
 # ── states ────────────────────────────────────────────────────────────────────
@@ -176,9 +196,10 @@ async def start(message: Message) -> None:
         f"❞"
     )
 
+    has_subscription = bool(sub and (sub.get("active") or sub.get("subscription_url")))
     await _send(message, "account.png", caption,
                 main_menu(_cfg().support_url, _cfg().instruction_url, _cfg().channel_url,
-                          _cfg().mini_app_url))
+                          _cfg().mini_app_url, has_subscription=has_subscription))
 
 
 # ── home ──────────────────────────────────────────────────────────────────────
@@ -213,9 +234,10 @@ async def home(callback: CallbackQuery) -> None:
         f"Статус: <b>{status_line}</b>\n"
         f"❞"
     )
+    has_subscription = bool(sub and (sub.get("active") or sub.get("subscription_url")))
     await _edit(callback, "account.png", caption,
                 main_menu(_cfg().support_url, _cfg().instruction_url, _cfg().channel_url,
-                          _cfg().mini_app_url))
+                          _cfg().mini_app_url, has_subscription=has_subscription))
 
 
 # ── subscription ──────────────────────────────────────────────────────────────
@@ -278,13 +300,11 @@ async def choose_plan(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("devices_count:"))
 async def choose_devices(callback: CallbackQuery, state: FSMContext) -> None:
-    from bot import db
     devices = int(callback.data.split(":", 1)[1])
     data = await state.get_data()
     months = data.get("months", 1)
 
-    plan = await db.get_plan_by_months(months)
-    base = float(plan["price_rub"]) if plan else 149.0 * months
+    plan, base = await _get_plan_or_fallback(months)
     device_extra = max(0, devices - DEVICE_BASE) * DEVICE_EXTRA_PRICE
     subtotal = int(base + device_extra)
 
@@ -364,12 +384,17 @@ async def pay_crypto(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.message.answer("❌ Не удалось создать счёт. Попробуйте позже.")
         return
 
-    payment = await db.create_payment(
-        user_id, float(total), "cryptopay",
-        provider_payment_id=str(invoice["invoice_id"]),
-        months=months, devices=devices, method="crypto",
-        traffic_gb=traffic_gb, bypass_gb=bypass_gb,
-    )
+    try:
+        payment = await db.create_payment(
+            user_id, float(total), "cryptopay",
+            provider_payment_id=str(invoice["invoice_id"]),
+            months=months, devices=devices, method="crypto",
+            traffic_gb=traffic_gb, bypass_gb=bypass_gb,
+        )
+    except Exception:
+        log.exception("DB create_payment failed for cryptopay")
+        await callback.message.answer("❌ База временно недоступна, оплату сейчас создать нельзя. Попробуйте позже.")
+        return
 
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup(inline_keyboard=[[
@@ -399,11 +424,16 @@ async def pay_yoo(callback: CallbackQuery, state: FSMContext) -> None:
     traffic_gb = data.get("traffic_gb", 0)
     bypass_gb = data.get("bypass_gb", BYPASS_BASE_GB)
 
-    payment = await db.create_payment(
-        user_id, float(total), "yoomoney",
-        months=months, devices=devices, method="card",
-        traffic_gb=traffic_gb, bypass_gb=bypass_gb,
-    )
+    try:
+        payment = await db.create_payment(
+            user_id, float(total), "yoomoney",
+            months=months, devices=devices, method="card",
+            traffic_gb=traffic_gb, bypass_gb=bypass_gb,
+        )
+    except Exception:
+        log.exception("DB create_payment failed for yoomoney")
+        await callback.answer("❌ База временно недоступна, оплату сейчас создать нельзя. Попробуйте позже.", show_alert=True)
+        return
     pay_url = pay_mod.yoomoney_payment_url(
         _cfg().yoomoney_wallet,
         total,
@@ -479,11 +509,12 @@ async def check_payment(callback: CallbackQuery, state: FSMContext) -> None:
     now_ts = int(__import__("datetime").datetime.now(__import__("datetime").timezone.utc).timestamp())
     try:
         rw = rw_module.get_remnawave()
-        # bypass_gb — лимит трафика белых списков в Remnawave (0 = безлимит)
+        # Обычные серверы остаются безлимитными в Remnawave.
+        # bypass_gb храним отдельно в webapp DB как лимит белых списков.
         vpn_user = await rw.create_vpn_user(
             user_telegram_id, months,
             device_limit=devices,
-            data_limit_gb=bypass_gb,
+            data_limit_gb=0,
         )
         sub_url = vpn_user.subscription_url
         # Фоллбэк если Remnawave не вернул URL
@@ -493,7 +524,7 @@ async def check_payment(callback: CallbackQuery, state: FSMContext) -> None:
         end_ts = now_ts + months * 30 * 24 * 3600
 
         # Sync to bot DB
-        plan = await db.get_plan_by_months(months)
+        plan, _ = await _get_plan_or_fallback(months)
         if plan:
             sub_rec = await db.upsert_subscription(
                 user_telegram_id, str(plan["id"]), months, devices,
@@ -596,11 +627,16 @@ async def top_up(callback: CallbackQuery) -> None:
 async def referral(callback: CallbackQuery) -> None:
     from bot import db
     user_id = callback.from_user.id
-    user = await db.ensure_user(user_id)
-    ref_code = user.get("referral_code") or "—"
+    try:
+        user = await db.ensure_user(user_id)
+        ref_code = user.get("referral_code") or str(user_id)
+        refs = await db.get_referrals_count(str(user["id"])) if user.get("id") else 0
+    except Exception as exc:
+        log.warning("DB referral lookup failed: %s", exc)
+        ref_code = str(user_id)
+        refs = 0
     bot_username = _cfg().bot_username
     link = f"https://t.me/{bot_username}?start=ref_{ref_code}"
-    refs = await db.get_referrals_count(str(user["id"])) if user.get("id") else 0
     caption = (
         f"📣 <b>Реферальная система</b>\n\n"
         f"🔗 Ваша ссылка:\n<code>{link}</code>\n\n"
@@ -658,19 +694,40 @@ async def bonus_days(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "devices")
 async def devices(callback: CallbackQuery) -> None:
+    from bot import device_management as device_module
     from bot import remnawave as rw_module
     user_id = callback.from_user.id
     try:
         rw = rw_module.get_remnawave()
-        sub = await rw.check_subscription(user_id)
+        sub, devices_list = await device_module.load_user_devices(rw, user_id)
     except Exception:
         sub = None
+        devices_list = []
 
-    caption = f"📱 <b>Устройства</b>\n\n"
-    if sub:
-        caption += f"Статус подписки: {'✅ Активна' if sub.get('active') else '❌ Неактивна'}\n\n"
-    caption += "Выберите платформу для инструкции по установке:"
-    await _edit(callback, "subscription.png", caption, devices_menu())
+    caption = device_module.render_devices_caption(sub, devices_list)
+    await _edit(callback, "subscription.png", caption, device_module.devices_management_menu(devices_list))
+
+
+@router.callback_query(F.data.startswith("device_disconnect:"))
+async def device_disconnect(callback: CallbackQuery) -> None:
+    from bot import device_management as device_module
+    from bot import remnawave as rw_module
+
+    try:
+        index = int(callback.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        return await callback.answer("Неверный номер устройства.", show_alert=True)
+
+    try:
+        rw = rw_module.get_remnawave()
+        ok, message = await device_module.disconnect_user_device(rw, callback.from_user.id, index)
+    except Exception:
+        log.exception("Device disconnect failed")
+        ok, message = False, "Не удалось отключить устройство."
+
+    await callback.answer(message, show_alert=not ok)
+    if ok:
+        await devices(callback)
 
 
 @router.callback_query(F.data.startswith("device:"))
@@ -728,6 +785,7 @@ async def device_install(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "traffic")
 async def traffic(callback: CallbackQuery) -> None:
+    from bot import db
     from bot import remnawave as rw_module
     user_id = callback.from_user.id
     try:
@@ -737,13 +795,17 @@ async def traffic(callback: CallbackQuery) -> None:
         sub = None
 
     if sub:
-        used = _fmt_bytes(sub.get("used_traffic", 0))
-        limit = _fmt_bytes(sub["data_limit"]) if sub.get("data_limit") else "∞"
+        wl = await db.get_webapp_whitelist_traffic(user_id)
+        bypass_used = _fmt_bytes((wl or {}).get("used", 0))
+        bypass_limit = "∞" if (wl or {}).get("unlimited") else _fmt_bytes((wl or {}).get("limit", 0))
         caption = (
             f"☁️ <b>Трафик</b>\n\n"
-            f"• Использовано: <b>{used}</b>\n"
-            f"• Лимит: <b>{limit}</b>\n\n"
-            "Купить дополнительный трафик:"
+            f"Простой трафик: <b>безлим</b>\n"
+            f"Обход белых списков: <b>{bypass_used} / {bypass_limit}</b>\n\n"
+            f"<b>Использовано:</b>\n\n"
+            f"🌐 Обычные сервера: <b>∞</b>\n"
+            f"🏳️ Белые списки: <b>{bypass_used} / {bypass_limit}</b>\n\n"
+            "Кнопка ниже докупает ГБ белых списков."
         )
     else:
         caption = "☁️ <b>Трафик</b>\n\nДля просмотра оформите подписку."
@@ -754,6 +816,15 @@ async def traffic(callback: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("traffic_count:"))
 async def choose_traffic(callback: CallbackQuery) -> None:
     await stub(callback, "Докупка трафика — скоро!")
+
+
+@router.callback_query(F.data == "buy_bypass_traffic")
+async def buy_bypass_traffic(callback: CallbackQuery) -> None:
+    await callback.answer()
+    await callback.message.answer(
+        "➕ <b>Докупить ГБ белых списков</b>\n\n"
+        "Откройте MiniApp и выберите пакет в разделе «Трафик белых списков»."
+    )
 
 
 # ── open_app / reset_link ─────────────────────────────────────────────────────
@@ -780,17 +851,33 @@ async def open_app(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "reset_link")
 async def reset_link(callback: CallbackQuery) -> None:
+    caption = (
+        "⚠️ <b>Перевыпуск ссылки подписки</b>\n\n"
+        "После подтверждения:\n"
+        "• Текущая ссылка перестанет работать\n"
+        "• Все устройства с текущим ключом потеряют доступ\n"
+        "• Будет выдана новая ссылка с новыми credentials\n"
+        "• Срок подписки не изменится\n"
+        "• Нужно будет заново импортировать подписку\n\n"
+        "<b>Вы уверены?</b>"
+    )
+    await _edit(callback, "subscription.png", caption, reset_link_confirm_menu())
+
+
+@router.callback_query(F.data == "reset_link_confirm")
+async def reset_link_confirm(callback: CallbackQuery) -> None:
     from bot import remnawave as rw_module
     user_id = callback.from_user.id
     try:
         rw = rw_module.get_remnawave()
-        raw_username = f"tg_{user_id}"
-        raw = await rw._get_raw_by_username(raw_username)
-        updated = await rw._request("POST", f"/api/users/{raw['uuid']}/actions/revoke")
-        new_url = updated.get("subscriptionUrl", "")
+        new_url = await rw.revoke_subscription(user_id)
         await callback.answer()
         await callback.message.answer(
-            f"🔑 <b>Ссылка перевыпущена!</b>\n\n<code>{new_url}</code>"
+            "✅ <b>Ссылка подписки успешно перевыпущена!</b>\n\n"
+            "Все предыдущие подключения отозваны.\n\n"
+            "💎 <b>Новая ссылка:</b>\n"
+            f"<code>{new_url}</code>\n\n"
+            "Импортируйте новую ссылку на ваших устройствах."
         )
     except Exception:
         await stub(callback, "Не удалось перевыпустить ссылку.")

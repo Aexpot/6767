@@ -330,9 +330,51 @@ class RemnawaveClient:
                 "username": username,
                 "uuid": raw.get("uuid", ""),
                 "short_uuid": raw.get("shortUuid", ""),
+                "hwid_device_limit": raw.get("hwidDeviceLimit") or 1,
             }
         except Exception:
             return None
+
+    async def get_user_devices(self, telegram_id: int) -> List[Dict[str, Any]]:
+        username = f"tg_{telegram_id}"
+        try:
+            raw = await self._get_raw_by_username(username)
+            data = await self._request("GET", f"/api/hwid/devices/{raw['uuid']}")
+            devices = data if isinstance(data, list) else []
+            return [
+                {
+                    "hwid": d.get("hwid") or d.get("id") or str(d),
+                    "device_model": d.get("deviceModel") or d.get("device_model"),
+                    "platform": d.get("platform"),
+                    "os_version": d.get("osVersion") or d.get("os_version"),
+                    "user_agent": d.get("userAgent") or d.get("user_agent"),
+                    "created_at": d.get("createdAt") or d.get("created_at"),
+                }
+                for d in devices
+                if isinstance(d, dict)
+            ]
+        except Exception:
+            return []
+
+    async def disconnect_device(self, telegram_id: int, hwid: str) -> bool:
+        username = f"tg_{telegram_id}"
+        try:
+            raw = await self._get_raw_by_username(username)
+            await self._request(
+                "POST",
+                "/api/hwid/devices/delete",
+                json={"userUuid": raw["uuid"], "hwid": hwid},
+            )
+            return True
+        except Exception:
+            log.exception("Failed to disconnect HWID device for telegram_id=%s", telegram_id)
+            return False
+
+    async def revoke_subscription(self, telegram_id: int) -> str:
+        username = f"tg_{telegram_id}"
+        raw = await self._get_raw_by_username(username)
+        updated = await self._request("POST", f"/api/users/{raw['uuid']}/actions/revoke")
+        return updated.get("subscriptionUrl") or await self.get_subscription_url(telegram_id)
 
     async def get_subscription_url(self, telegram_id: int) -> str:
         username = f"tg_{telegram_id}"
