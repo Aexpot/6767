@@ -168,6 +168,39 @@ async def webapp_sync_subscription(
         log.exception("webapp_sync_subscription failed for telegram_id=%s", telegram_id)
 
 
+async def get_webapp_whitelist_traffic(telegram_id: int) -> Optional[Dict[str, Any]]:
+    """Read white-list bypass traffic counters from the webapp subscription table."""
+    pool = get_webapp_pool()
+    if not pool:
+        return None
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT
+                     COALESCE(s.premium_used_bytes, 0) AS used,
+                     COALESCE(s.premium_baseline_bytes, 0) AS baseline,
+                     COALESCE(s.premium_topup_balance_bytes, 0) AS topup,
+                     COALESCE(s.premium_bonus_bytes, 0) AS bonus,
+                     COALESCE(s.premium_unlimited_override, false) AS unlimited
+                   FROM subscriptions s
+                   JOIN users u ON u.user_id = s.user_id
+                   WHERE u.telegram_id = $1 AND s.is_active = TRUE AND s.end_date > NOW()
+                   ORDER BY s.end_date DESC LIMIT 1""",
+                telegram_id,
+            )
+            if not row:
+                return None
+            limit = 0 if row["unlimited"] else int(row["baseline"] or 0) + int(row["topup"] or 0) + int(row["bonus"] or 0)
+            return {
+                "used": int(row["used"] or 0),
+                "limit": limit,
+                "unlimited": bool(row["unlimited"]),
+            }
+    except Exception:
+        log.exception("get_webapp_whitelist_traffic failed for telegram_id=%s", telegram_id)
+        return None
+
+
 # ── users ──────────────────────────────────────────────────────────────────────
 
 async def ensure_user(telegram_id: int, username: str = "", first_name: str = "", last_name: str = "") -> Dict[str, Any]:

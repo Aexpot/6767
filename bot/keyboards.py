@@ -43,7 +43,7 @@ def btn(text: str, callback_data: str | None = None, url: str | None = None,
 # ── user menus ────────────────────────────────────────────────────────────────
 
 def main_menu(support_url: str, instruction_url: str, channel_url: str,
-              mini_app_url: str = "") -> InlineKeyboardMarkup:
+              mini_app_url: str = "", has_subscription: bool = False) -> InlineKeyboardMarkup:
     open_app_btn = (
         btn("🚀 Открыть приложение", web_app=WebAppInfo(url=mini_app_url))
         if mini_app_url else btn("🚀 Открыть приложение", "open_app")
@@ -52,15 +52,17 @@ def main_menu(support_url: str, instruction_url: str, channel_url: str,
         btn("📘 Инструкция", web_app=WebAppInfo(url=mini_app_url))
         if mini_app_url else btn("📘 Инструкция", url=instruction_url)
     )
-    return rows(
+    menu_rows = [
         [btn("🛒 Оформить подписку", "buy")],
-        [btn("💻 Управление подпиской", "subscription")],
         [btn("🎟 Промокод", "promos")],
         [btn("🔗 Реферальная система", "referral")],
         [btn("💬 Поддержка", url=support_url), instruction_btn],
         [btn("📣 Канал", url=channel_url)],
         [open_app_btn],
-    )
+    ]
+    if has_subscription:
+        menu_rows.insert(1, [btn("💻 Управление подпиской", "subscription")])
+    return rows(*menu_rows)
 
 
 def subscription_menu() -> InlineKeyboardMarkup:
@@ -134,7 +136,15 @@ def payment_choice_menu(amount: int) -> InlineKeyboardMarkup:
 
 def traffic_menu() -> InlineKeyboardMarkup:
     return rows(
+        [btn("➕ Докупить ГБ белых списков", "buy_bypass_traffic")],
         [btn("← Назад", "subscription")],
+    )
+
+
+def reset_link_confirm_menu() -> InlineKeyboardMarkup:
+    return rows(
+        [btn("Да, перевыпустить", "reset_link_confirm")],
+        [btn("← Вернуться назад", "subscription")],
     )
 
 
@@ -175,6 +185,7 @@ def devices_menu() -> InlineKeyboardMarkup:
     return rows(
         [btn("iPhone (iOS)", "device:ios"), btn("Android", "device:android")],
         [btn("Windows", "device:windows"), btn("Mac OS", "device:macos")],
+        [btn("➕ Докупить устройство — 90 ₽", "buy")],
         [btn("← Назад", "subscription")],
     )
 

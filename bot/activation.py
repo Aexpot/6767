@@ -40,7 +40,7 @@ async def activate_vpn_and_notify(bot, payment_id: str) -> None:
     try:
         rw = rw_mod.get_remnawave()
         vpn_user = await rw.create_vpn_user(
-            user_telegram_id, months, device_limit=devices, data_limit_gb=bypass_gb,
+            user_telegram_id, months, device_limit=devices, data_limit_gb=0,
         )
         sub_url = vpn_user.subscription_url or await rw.get_subscription_url(user_telegram_id)
         panel_uuid = vpn_user.uuid
