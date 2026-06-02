@@ -39,22 +39,21 @@ def _device_name(device: Device, index: int) -> str:
 def render_devices_caption(sub: Optional[Dict[str, Any]], devices: List[Device]) -> str:
     caption = "📱 <b>Управление устройствами</b>\n\n"
 
-    if not sub or not sub.get("active"):
+    if not sub and not devices:
         return (
             caption
-            + "Для просмотра и отключения устройств нужна активная подписка.\n\n"
-            + "Если подписка уже оплачена, обновите статус или напишите в поддержку."
+            + "Подключенные устройства пока не найдены.\n\n"
+            + "Если устройство уже подключено к VPN, нажмите «Обновить» через минуту."
         )
 
-    max_devices = int(sub.get("hwid_device_limit") or DEVICE_BASE)
+    max_devices = int((sub or {}).get("hwid_device_limit") or DEVICE_BASE)
     caption += f"Устройства: <b>{len(devices)} / {max_devices}</b>\n\n"
 
     if not devices:
         return (
             caption
             + "Пока ни одно устройство не зарегистрировано.\n"
-            + "Откройте подписку в VPN-клиенте, и устройство появится автоматически.\n\n"
-            + "Ниже можно выбрать инструкцию по установке."
+            + "Откройте подписку в VPN-клиенте, и устройство появится автоматически."
         )
 
     caption += "Активные устройства:\n"
@@ -86,9 +85,7 @@ def devices_management_menu(devices: List[Device]) -> InlineKeyboardMarkup:
 
     menu_rows.extend(
         [
-            [btn("iPhone (iOS)", "device:ios"), btn("Android", "device:android")],
-            [btn("Windows", "device:windows"), btn("Mac OS", "device:macos")],
-            [btn("➕ Докупить устройство - 90 ₽", "buy")],
+            [btn("🔄 Обновить", "devices")],
             [btn("← Назад", "subscription")],
         ]
     )
@@ -97,15 +94,11 @@ def devices_management_menu(devices: List[Device]) -> InlineKeyboardMarkup:
 
 async def load_user_devices(rw: Any, telegram_id: int) -> tuple[Optional[Dict[str, Any]], List[Device]]:
     sub = await rw.check_subscription(telegram_id)
-    if not sub or not sub.get("active"):
-        return sub, []
     return sub, await rw.get_user_devices(telegram_id)
 
 
 async def disconnect_user_device(rw: Any, telegram_id: int, index: int) -> tuple[bool, str]:
     sub, devices = await load_user_devices(rw, telegram_id)
-    if not sub or not sub.get("active"):
-        return False, "Нужна активная подписка."
     if index < 1 or index > len(devices):
         return False, "Устройство не найдено. Обновите список и попробуйте снова."
 
