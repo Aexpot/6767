@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     if (ticketId) {
       // Return single ticket + messages
       const ticketRes = await query(
-        `SELECT t.*, u.telegram_id, u.username, u.first_name, u.last_name
+        `SELECT t.*, t.ticket_id AS id, u.telegram_id, u.username, u.first_name, u.last_name
          FROM support_tickets t
          JOIN users u ON u.user_id = t.user_id
          WHERE t.ticket_id = $1`,
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
       if (!ticketRes.rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
       const msgsRes = await query(
-        `SELECT m.*, u.username, u.first_name, u.telegram_id
+        `SELECT m.*, m.message_id AS id, u.username, u.first_name, u.telegram_id
          FROM support_ticket_messages m
          LEFT JOIN users u ON u.user_id = m.author_user_id
          WHERE m.ticket_id = $1
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
       : `WHERE t.status = '${status === 'open' ? 'open' : 'closed'}'`
 
     const result = await query(
-      `SELECT t.*,
+      `SELECT t.*, t.ticket_id AS id,
          u.telegram_id, u.username, u.first_name, u.last_name,
          (SELECT body        FROM support_ticket_messages WHERE ticket_id = t.ticket_id ORDER BY created_at DESC LIMIT 1) AS last_message,
          (SELECT author_role FROM support_ticket_messages WHERE ticket_id = t.ticket_id ORDER BY created_at DESC LIMIT 1) AS last_message_role_msg,
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
       const msgRes = await query(
         `INSERT INTO support_ticket_messages (ticket_id, author_role, body, is_internal_note)
          VALUES ($1, 'admin', $2, FALSE)
-         RETURNING *`,
+         RETURNING *, message_id AS id`,
         [ticket_id, message.trim()]
       )
 
