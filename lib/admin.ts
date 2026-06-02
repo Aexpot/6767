@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server'
 
-const ADMIN_TELEGRAM_IDS = process.env.ADMIN_TELEGRAM_IDS?.split(',').map(id => parseInt(id.trim())) || []
+const ADMIN_TELEGRAM_IDS = (process.env.ADMIN_TELEGRAM_IDS || process.env.ADMIN_IDS || '')
+  .split(',')
+  .map(id => parseInt(id.trim()))
+  .filter(Number.isFinite)
 
 export function isAdmin(telegramId: number): boolean {
   return ADMIN_TELEGRAM_IDS.includes(telegramId)

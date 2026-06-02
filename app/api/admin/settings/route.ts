@@ -4,11 +4,32 @@ import { remnawave } from '@/lib/remnawave'
 
 // Check if user is admin
 async function isAdmin(telegramId: number): Promise<boolean> {
-  const result = await query(
-    'SELECT is_admin FROM users WHERE telegram_id = $1',
-    [telegramId]
-  )
-  return result.rows[0]?.is_admin || false
+  const adminIds = (process.env.ADMIN_TELEGRAM_IDS || process.env.ADMIN_IDS || '')
+    .split(',')
+    .map(s => Number(s.trim()))
+    .filter(Number.isFinite)
+  if (adminIds.includes(telegramId)) return true
+
+  try {
+    const result = await query(
+      'SELECT is_admin FROM users WHERE telegram_id = $1',
+      [telegramId]
+    )
+    return result.rows[0]?.is_admin || false
+  } catch {
+    return false
+  }
+}
+
+async function ensureSettingsTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      id INTEGER PRIMARY KEY,
+      maintenance_mode BOOLEAN DEFAULT FALSE,
+      maintenance_message TEXT DEFAULT 'Ведутся технические работы',
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `)
 }
 
 // GET - Get settings (public endpoint for maintenance check)
@@ -16,6 +37,8 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const telegramId = searchParams.get('telegram_id')
+
+    await ensureSettingsTable()
 
     // Get settings from database
     const result = await query('SELECT * FROM system_settings WHERE id = 1')
@@ -54,6 +77,8 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json()
     const { maintenance_mode, maintenance_message } = body
+
+    await ensureSettingsTable()
 
     // Update settings
     const result = await query(

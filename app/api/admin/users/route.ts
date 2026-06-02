@@ -21,31 +21,39 @@ export async function GET(request: NextRequest) {
 
     let sql = `
       SELECT
-        u.*,
+        u.user_id AS id,
+        u.user_id,
+        u.telegram_id,
+        u.username,
+        u.first_name,
+        u.last_name,
+        u.language_code,
+        COALESCE(u.registration_date, NOW()) AS created_at,
+        COALESCE(u.is_banned, FALSE) AS is_banned,
+        FALSE AS is_admin,
         COALESCE(
           json_agg(
             json_build_object(
-              'id', s.id,
-              'status', s.status,
-              'started_at', s.started_at,
-              'created_at', s.created_at,
-              'expires_at', s.expires_at,
+              'id', s.subscription_id,
+              'status', CASE WHEN s.is_active AND s.end_date > NOW() THEN 'active' ELSE 'expired' END,
+              'started_at', s.start_date,
+              'created_at', s.start_date,
+              'expires_at', s.end_date,
               'subscription_plans', json_build_object(
-                'name', sp.name,
-                'duration_months', sp.duration_months
+                'name', COALESCE(NULLIF(s.tariff_key, ''), 'Подписка'),
+                'duration_months', s.duration_months
               )
-            ) ORDER BY s.created_at DESC
-          ) FILTER (WHERE s.id IS NOT NULL),
+            ) ORDER BY s.start_date DESC NULLS LAST
+          ) FILTER (WHERE s.subscription_id IS NOT NULL),
           '[]'
         ) as subscriptions
       FROM users u
       LEFT JOIN LATERAL (
         SELECT * FROM subscriptions
-        WHERE user_id = u.id
-        ORDER BY created_at DESC
+        WHERE user_id = u.user_id
+        ORDER BY start_date DESC NULLS LAST, subscription_id DESC
         LIMIT 1
       ) s ON true
-      LEFT JOIN subscription_plans sp ON s.plan_id = sp.id
     `
 
     const params: any[] = []
@@ -58,29 +66,29 @@ export async function GET(request: NextRequest) {
 
     // Apply filters
     if (filter === 'active') {
-      conditions.push(`s.status = 'active' AND s.expires_at > NOW()`)
+      conditions.push(`s.is_active = TRUE AND s.end_date > NOW()`)
     } else if (filter === 'inactive') {
-      conditions.push(`(s.status IS NULL OR s.status != 'active' OR s.expires_at <= NOW())`)
+      conditions.push(`(s.subscription_id IS NULL OR s.is_active = FALSE OR s.end_date <= NOW())`)
     } else if (filter === 'banned') {
       conditions.push(`u.is_banned = true`)
     } else if (filter === 'admin') {
-      conditions.push(`u.is_admin = true`)
+      conditions.push(`FALSE`)
     }
 
     if (conditions.length > 0) {
       sql += ` WHERE ` + conditions.join(' AND ')
     }
 
-    sql += ` GROUP BY u.id ORDER BY u.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
+    sql += ` GROUP BY u.user_id ORDER BY COALESCE(u.registration_date, NOW()) DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
     params.push(limit, offset)
 
     const result = await query(sql, params)
 
-    // Get admin ID for logging
-    const adminResult = await query('SELECT id FROM users WHERE telegram_id = $1', [request.nextUrl.searchParams.get('telegram_id')])
+    // admin_logs is optional in the deployed schema.
+    const adminResult = await query('SELECT user_id FROM users WHERE telegram_id = $1', [request.nextUrl.searchParams.get('telegram_id')]).catch(() => ({ rows: [] as any[] }))
     if (adminResult.rows.length > 0) {
       await logAdminAction({
-        admin_id: adminResult.rows[0].id,
+        admin_id: String(adminResult.rows[0].user_id),
         action: 'users_list_view',
         details: { filter, search, page, limit },
         ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,

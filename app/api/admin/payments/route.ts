@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAdminAccess } from '@/lib/admin'
 import { query } from '@/lib/db'
+import { remnawave, isRemnawaveConfigured } from '@/lib/remnawave'
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,25 +20,40 @@ export async function GET(request: NextRequest) {
 
     let sql = `
       SELECT
-        p.*,
+        p.payment_id AS id,
+        p.payment_id,
+        p.user_id,
+        p.status,
+        p.provider AS payment_provider,
+        p.provider AS payment_method,
+        p.amount AS amount_rub,
+        p.currency,
+        p.description,
+        p.created_at,
+        p.updated_at,
         json_build_object(
           'telegram_id', u.telegram_id,
           'username', u.username,
           'first_name', u.first_name
         ) as users,
         json_build_object(
-          'id', s.id,
-          'status', s.status,
+          'id', s.subscription_id,
+          'status', CASE WHEN s.is_active AND s.end_date > NOW() THEN 'active' ELSE 'expired' END,
           'subscription_plans', json_build_object(
-            'name', sp.name,
-            'duration_months', sp.duration_months,
-            'price_rub', sp.price_rub
+            'name', COALESCE(NULLIF(s.tariff_key, ''), 'Подписка'),
+            'duration_months', s.duration_months,
+            'price_rub', p.amount
           )
         ) as subscriptions
       FROM payments p
-      LEFT JOIN users u ON p.user_id = u.id
-      LEFT JOIN subscriptions s ON p.subscription_id = s.id
-      LEFT JOIN subscription_plans sp ON s.plan_id = sp.id
+      LEFT JOIN users u ON p.user_id = u.user_id
+      LEFT JOIN LATERAL (
+        SELECT *
+        FROM subscriptions
+        WHERE user_id = p.user_id
+        ORDER BY start_date DESC NULLS LAST, subscription_id DESC
+        LIMIT 1
+      ) s ON true
     `
 
     const params: any[] = []
@@ -94,7 +110,7 @@ export async function PATCH(request: NextRequest) {
     const updateResult = await query(
       `UPDATE payments
        SET status = $1, updated_at = NOW()
-       WHERE id = $2
+       WHERE payment_id = $2
        RETURNING *`,
       [status, payment_id]
     )
@@ -106,13 +122,14 @@ export async function PATCH(request: NextRequest) {
     const payment = updateResult.rows[0]
 
     // If marking as completed, activate the subscription
-    if (status === 'completed' && payment.subscription_id) {
+    if (status === 'completed' && payment.user_id) {
       const subResult = await query(
-        `SELECT s.*, sp.duration_months, sp.name
+        `SELECT s.*, s.duration_months, COALESCE(NULLIF(s.tariff_key, ''), 'Подписка') AS name
          FROM subscriptions s
-         JOIN subscription_plans sp ON s.plan_id = sp.id
-         WHERE s.id = $1`,
-        [payment.subscription_id]
+         WHERE s.user_id = $1
+         ORDER BY s.start_date DESC NULLS LAST, s.subscription_id DESC
+         LIMIT 1`,
+        [payment.user_id]
       )
 
       if (subResult.rows.length > 0) {
@@ -122,37 +139,63 @@ export async function PATCH(request: NextRequest) {
 
         await query(
           `UPDATE subscriptions
-           SET status = 'active',
-               started_at = NOW(),
-               expires_at = $1,
-               updated_at = NOW()
-           WHERE id = $2`,
-          [expiresAt.toISOString(), payment.subscription_id]
+           SET is_active = TRUE,
+               start_date = COALESCE(start_date, NOW()),
+               end_date = $1
+           WHERE subscription_id = $2`,
+          [expiresAt.toISOString(), plan.subscription_id]
         )
+
+        // Provision VPN user in Remnawave
+        if (isRemnawaveConfigured()) {
+          try {
+            const userResult = await query(
+              'SELECT telegram_id FROM users WHERE user_id = $1',
+              [payment.user_id]
+            )
+            if (userResult.rows.length > 0) {
+              const devicesCount = Math.max(1, parseInt(plan.devices_count) || 1)
+              await remnawave.createVpnUser(userResult.rows[0].telegram_id, plan.duration_months, devicesCount)
+            }
+          } catch (vpnError) {
+            console.error('Admin payment confirm — Remnawave error:', vpnError)
+          }
+        }
       }
     }
 
     // Get updated payment with relations
     const fullPayment = await query(
       `SELECT
-        p.*,
+        p.payment_id AS id,
+        p.payment_id,
+        p.user_id,
+        p.status,
+        p.provider AS payment_provider,
+        p.provider AS payment_method,
+        p.amount AS amount_rub,
+        p.currency,
+        p.description,
+        p.created_at,
+        p.updated_at,
         json_build_object(
           'telegram_id', u.telegram_id,
           'username', u.username,
           'first_name', u.first_name
         ) as users,
         json_build_object(
-          'id', s.id,
-          'status', s.status,
+          'id', s.subscription_id,
+          'status', CASE WHEN s.is_active AND s.end_date > NOW() THEN 'active' ELSE 'expired' END,
           'subscription_plans', json_build_object(
-            'name', sp.name
+            'name', COALESCE(NULLIF(s.tariff_key, ''), 'Подписка')
           )
         ) as subscriptions
       FROM payments p
-      LEFT JOIN users u ON p.user_id = u.id
-      LEFT JOIN subscriptions s ON p.subscription_id = s.id
-      LEFT JOIN subscription_plans sp ON s.plan_id = sp.id
-      WHERE p.id = $1`,
+      LEFT JOIN users u ON p.user_id = u.user_id
+      LEFT JOIN subscriptions s ON s.user_id = p.user_id
+      WHERE p.payment_id = $1
+      ORDER BY s.start_date DESC NULLS LAST, s.subscription_id DESC
+      LIMIT 1`,
       [payment_id]
     )
 
@@ -181,7 +224,7 @@ export async function DELETE(request: NextRequest) {
 
     // Delete payment
     const deleteResult = await query(
-      'DELETE FROM payments WHERE id = $1 RETURNING *',
+      'DELETE FROM payments WHERE payment_id = $1 RETURNING *',
       [payment_id]
     )
 
